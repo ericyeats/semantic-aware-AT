@@ -27,8 +27,16 @@ from gowal21uncovering.utils import WATrainer
 
 parse = parser_train()
 parse.add_argument('--tau', type=float, default=0.995, help='Weight averaging decay.')
+
+# extra args for score-based constraint
+parse.add_argument('--score', action='store_true', help='Adversarial training with EDM-based semantic projection')
+parse.add_argument('--gamma', help='Semantic cutoff value in [0, 1], default 0.3', type=float, default=0.3)
+parse.add_argument('--score_network_pkl', help='Network pickle filename', metavar='PATH|URL', type=str)
+parse.add_argument('--time', help='Time in [0, 1] to which data should be diffused for average scores. default 0.1', type=float, default=0.1)
+parse.add_argument('--n_mc_samples', type=int, default=10, help='Number of samples for average score calculation')
+
 args = parse.parse_args()
-assert args.data in SEMISUP_DATASETS, f'Only data in {SEMISUP_DATASETS} is supported!'
+# assert args.data in SEMISUP_DATASETS, f'Only data in {SEMISUP_DATASETS} is supported!'
 
 
 DATA_DIR = os.path.join(args.data_dir, args.data)
@@ -59,11 +67,19 @@ torch.backends.cudnn.benchmark = True
 # Load data
 
 seed(args.seed)
-train_dataset, test_dataset, eval_dataset, train_dataloader, test_dataloader, eval_dataloader = load_data(
+val = args.data in SEMISUP_DATASETS
+loaded_data = load_data(
     DATA_DIR, BATCH_SIZE, BATCH_SIZE_VALIDATION, use_augmentation=args.augment, use_consistency=args.consistency, shuffle_train=True, 
-    aux_data_filename=args.aux_data_filename, unsup_fraction=args.unsup_fraction, validation=True
+    aux_data_filename=args.aux_data_filename, unsup_fraction=args.unsup_fraction, validation=val
 )
-del train_dataset, test_dataset, eval_dataset
+if val:
+    train_dataset, test_dataset, eval_dataset, train_dataloader, test_dataloader, eval_dataloader = loaded_data
+    del train_dataset, test_dataset, eval_dataset
+else:
+    train_dataset, test_dataset, train_dataloader, test_dataloader = loaded_data
+    del train_dataset, test_dataset
+    eval_dataloader = test_dataloader
+
 
 
 # Adversarial Training
@@ -118,13 +134,14 @@ for epoch in range(start_epoch, NUM_ADV_EPOCHS+1):
         epoch_metrics.update({'test_adversarial_acc': test_adv_acc})
     else:
         logger.log('Adversarial Accuracy-\tTrain: {:.2f}%.'.format(res['adversarial_acc']*100))
+    
     eval_adv_acc = trainer.eval(eval_dataloader, adversarial=True)
     logger.log('Adversarial Accuracy-\tEval: {:.2f}%.'.format(eval_adv_acc*100))
     epoch_metrics['eval_adversarial_acc'] = eval_adv_acc
-    
     if eval_adv_acc >= old_score[1]:
         old_score[0], old_score[1] = test_acc, eval_adv_acc
         trainer.save_model(WEIGHTS)
+
     # trainer.save_model(os.path.join(LOG_DIR, 'weights-last.pt'))
     if epoch % 10 == 0:
         trainer.save_model_resume(os.path.join(LOG_DIR, 'state-last.pt'), epoch) 

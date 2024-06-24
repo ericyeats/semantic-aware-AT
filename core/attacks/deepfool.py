@@ -15,7 +15,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def perturb_deepfool(xvar, yvar, predict, nb_iter=50, overshoot=0.02, ord=np.inf, clip_min=0.0, clip_max=1.0, 
-                     search_iter=0, device=None):
+                     search_iter=0, device=None, y_x_score=None, gamma=0.):
     """
     Compute DeepFool perturbations (Moosavi-Dezfooli et al, 2016).
     Arguments:
@@ -33,7 +33,8 @@ def perturb_deepfool(xvar, yvar, predict, nb_iter=50, overshoot=0.02, ord=np.inf
         torch.Tensor containing the perturbed input, 
         torch.Tensor containing the perturbation
     """
-
+    if y_x_score is not None:
+        raise NotImplementedError("Deepfool perturb with y_x projection not implemented yet...")
     x_orig = xvar
     x = torch.empty_like(xvar).copy_(xvar)
     x.requires_grad_(True)
@@ -131,7 +132,7 @@ class DeepFoolAttack(Attack, LabelMixin):
         self.ord = ord
         assert is_float_or_torch_tensor(self.overshoot)
 
-    def perturb(self, x, y=None):
+    def perturb(self, x, y=None, y_x_score=None, gamma=0.):
         """
         Given examples x, returns their adversarial counterparts.
         Arguments:
@@ -146,7 +147,7 @@ class DeepFoolAttack(Attack, LabelMixin):
         x, y = self._verify_and_process_inputs(x, None)
         x_adv, r_adv = perturb_deepfool(x, y, self.predict, self.nb_iter, self.overshoot, ord=self.ord, 
                                         clip_min=self.clip_min, clip_max=self.clip_max, search_iter=self.search_iter, 
-                                        device=device)
+                                        device=device, y_x_score=y_x_score, gamma=gamma)
         return x_adv, r_adv
 
 

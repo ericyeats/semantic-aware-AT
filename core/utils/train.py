@@ -18,6 +18,7 @@ from .utils import seed
 from .mart import mart_loss
 from .rst import CosineLR
 from .trades import trades_loss
+from mc_score import MC_Score_EDM
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -47,6 +48,13 @@ class Trainer(object):
         
         self.attack, self.eval_attack = self.init_attack(self.model, self.criterion, self.params.attack, self.params.attack_eps, 
                                                          self.params.attack_iter, self.params.attack_step)
+
+        if self.params.score: # initalize a score model
+            assert isinstance(self.params.time, float)
+            assert isinstance(self.params.n_mc_samples, int)
+            score_model = MC_Score_EDM(self.params.score_network_pkl, self.params.time, self.params.n_mc_samples)
+            self.score_model = nn.DataParallel(score_model).to(device)
+
         
     
     @staticmethod
@@ -108,12 +116,17 @@ class Trainer(object):
             x, y = x.to(device), y.to(device)
             
             if adversarial:
+                y_x_score = None
+                if self.params.score:
+                    with torch.no_grad():
+                        y_x_score = self.score_model(x, y) # pass this to the attacks
+
                 if self.params.beta is not None and self.params.mart:
                     loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
                 elif self.params.beta is not None:
                     loss, batch_metrics = self.trades_loss(x, y, beta=self.params.beta)
                 else:
-                    loss, batch_metrics = self.adversarial_loss(x, y)
+                    loss, batch_metrics = self.adversarial_loss(x, y, y_x_score=y_x_score)
             else:
                 loss, batch_metrics = self.standard_loss(x, y)
                 
@@ -124,7 +137,8 @@ class Trainer(object):
             if self.params.scheduler in ['cyclic']:
                 self.scheduler.step()
             
-            metrics = metrics.append(pd.DataFrame(batch_metrics, index=[0]), ignore_index=True)
+            # metrics = metrics.append(pd.DataFrame(batch_metrics, index=[0]), ignore_index=True) ### NOTE - DEPRECATED
+            metrics = pd.concat([metrics, pd.DataFrame(batch_metrics, index=[0])], ignore_index=True)
         
         if self.params.scheduler in ['step', 'converge', 'cosine', 'cosinew']:
             self.scheduler.step()
@@ -144,12 +158,12 @@ class Trainer(object):
         return loss, batch_metrics
     
     
-    def adversarial_loss(self, x, y):
+    def adversarial_loss(self, x, y, y_x_score=None):
         """
         Adversarial training (Madry et al, 2017).
         """
         with ctx_noparamgrad_and_eval(self.model):
-            x_adv, _ = self.attack.perturb(x, y)
+            x_adv, _ = self.attack.perturb(x, y, y_x_score=y_x_score, gamma=self.params.gamma)
         
         self.optimizer.zero_grad()
         if self.params.keep_clean:

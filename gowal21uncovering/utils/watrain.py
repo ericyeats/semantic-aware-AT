@@ -110,6 +110,12 @@ class WATrainer(Trainer):
                     x, y = x.to(device), y.to(device)
                 
                 if adversarial:
+
+                    y_x_score = None
+                    if self.params.score: # estimate the scores at this x,y pair
+                        with torch.no_grad():
+                            y_x_score = self.score_model(x, y) # pass this to the attacks
+
                     if self.params.beta is not None and self.params.mart:
                         loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
                     elif self.params.beta is not None and self.params.LSE:
@@ -117,7 +123,7 @@ class WATrainer(Trainer):
                     elif self.params.beta is not None:
                         loss, batch_metrics = self.trades_loss(x, y, beta=self.params.beta)
                     else:
-                        loss, batch_metrics = self.adversarial_loss(x, y)
+                        loss, batch_metrics = self.adversarial_loss(x, y, y_x_score=y_x_score)
                 else:
                     loss, batch_metrics = self.standard_loss(x, y)
                     
@@ -131,7 +137,8 @@ class WATrainer(Trainer):
             global_step = (epoch - 1) * self.update_steps + update_iter
             ema_update(self.wa_model, self.model, global_step, decay_rate=self.params.tau, 
                        warmup_steps=self.warmup_steps, dynamic_decay=True)
-            metrics = metrics.append(pd.DataFrame(batch_metrics, index=[0]), ignore_index=True)
+            # metrics = metrics.append(pd.DataFrame(batch_metrics, index=[0]), ignore_index=True) ### NOTE - DEPRECATED
+            metrics = pd.concat([metrics, pd.DataFrame(batch_metrics, index=[0])], ignore_index=True)
         
         if self.params.scheduler in ['step', 'converge', 'cosine', 'cosinew']:
             self.scheduler.step()

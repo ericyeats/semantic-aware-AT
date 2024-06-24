@@ -20,8 +20,8 @@ def parser_train():
     parser.add_argument('--batch-size', type=int, default=1024, help='Batch size for training.')
     parser.add_argument('--batch-size-validation', type=int, default=512, help='Batch size for testing.')
     
-    parser.add_argument('--data-dir', type=str, default='/cluster/home/rarade/data/')
-    parser.add_argument('--log-dir', type=str, default='/cluster/scratch/rarade/test/')
+    parser.add_argument('--data-dir', type=str, default='~/data')
+    parser.add_argument('--log-dir', type=str, default='./temp/')
     
     parser.add_argument('-d', '--data', type=str, default='cifar10s', choices=DATASETS, help='Data to use.')
     parser.add_argument('--desc', type=str, required=True, 

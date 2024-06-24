@@ -12,10 +12,11 @@ from .utils import is_float_or_torch_tensor
 from .utils import normalize_by_pnorm
 from .utils import rand_init_delta
 from .utils import replicate_input
+from .utils import project_y_x
 
 
 def perturb_iterative(xvar, yvar, predict, nb_iter, eps, eps_iter, loss_fn, delta_init=None, minimize=False, ord=np.inf, 
-                      clip_min=0.0, clip_max=1.0):
+                      clip_min=0.0, clip_max=1.0, y_x_score=None, gamma=0.):
     """
     Iteratively maximize the loss over the input. It is a shared method for iterative attacks.
     Arguments:
@@ -51,12 +52,16 @@ def perturb_iterative(xvar, yvar, predict, nb_iter, eps, eps_iter, loss_fn, delt
         if ord == np.inf:
             grad_sign = delta.grad.data.sign()
             delta.data = delta.data + batch_multiply(eps_iter, grad_sign)
+            if y_x_score is not None:
+                delta.data = project_y_x(delta.data, y_x_score, gamma)
             delta.data = batch_clamp(eps, delta.data)
             delta.data = clamp(xvar.data + delta.data, clip_min, clip_max) - xvar.data
         elif ord == 2:
             grad = delta.grad.data
             grad = normalize_by_pnorm(grad)
             delta.data = delta.data + batch_multiply(eps_iter, grad)
+            if y_x_score is not None:
+                delta.data = project_y_x(delta.data, y_x_score, gamma)
             delta.data = clamp(xvar.data + delta.data, clip_min, clip_max) - xvar.data
             if eps is not None:
                 delta.data = clamp_by_pnorm(delta.data, ord, eps)
@@ -104,7 +109,7 @@ class PGDAttack(Attack, LabelMixin):
         assert is_float_or_torch_tensor(self.eps_iter)
         assert is_float_or_torch_tensor(self.eps)
 
-    def perturb(self, x, y=None):
+    def perturb(self, x, y=None, y_x_score=None, gamma=0.):
         """
         Given examples (x, y), returns their adversarial counterparts with an attack length of eps.
         Arguments:
@@ -134,7 +139,8 @@ class PGDAttack(Attack, LabelMixin):
         
         x_adv, r_adv = perturb_iterative(
             x, y, self.predict, nb_iter=self.nb_iter, eps=self.eps, eps_iter=self.eps_iter, loss_fn=self.loss_fn, 
-            minimize=self.targeted, ord=self.ord, clip_min=self.clip_min, clip_max=self.clip_max, delta_init=delta
+            minimize=self.targeted, ord=self.ord, clip_min=self.clip_min, clip_max=self.clip_max, delta_init=delta,
+            y_x_score=y_x_score, gamma=gamma
         )
 
         return x_adv.data, r_adv.data

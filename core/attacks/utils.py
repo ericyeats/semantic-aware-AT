@@ -213,3 +213,15 @@ def CWLoss(output, target, confidence=0):
     loss = - torch.clamp(real - other + confidence, min=0.)
     loss = torch.sum(loss)
     return loss
+
+
+def project_y_x(delta, y_x_score, gamma=0.):
+    # calculate the inner product of delta and y_x_score
+    dsc_inner = (delta * (-y_x_score)).sum(dim=(1,2,3))
+    gamma_vec = gamma * (-y_x_score) / y_x_score.square().sum(dim=(1,2,3))[:, None, None, None]
+    gamma_vec_unit = gamma_vec / gamma_vec.square().sum(dim=(1,2,3)).sqrt()[:, None, None, None]
+    delta = delta.where(
+        (dsc_inner >= gamma)[:, None, None, None].expand_as(delta),
+        delta - ((delta * gamma_vec_unit).square().sum(dim=(1,2,3)).sqrt()[:, None, None, None] * gamma_vec_unit - gamma_vec)
+    )
+    return delta

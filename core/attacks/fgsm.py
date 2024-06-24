@@ -3,7 +3,9 @@ import torch.nn as nn
 
 from .base import Attack, LabelMixin
 from .utils import batch_multiply
-from .utils import clamp 
+from .utils import clamp
+from .utils import project_y_x
+from .utils import normalize_by_pnorm
 
 
 class FGSMAttack(Attack, LabelMixin):
@@ -26,7 +28,7 @@ class FGSMAttack(Attack, LabelMixin):
         if self.loss_fn is None:
             self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
 
-    def perturb(self, x, y=None):
+    def perturb(self, x, y=None, y_x_score=None, gamma=0.):
         """
         Given examples (x, y), returns their adversarial counterparts with an attack length of eps.
         Arguments:
@@ -49,8 +51,10 @@ class FGSMAttack(Attack, LabelMixin):
             loss = -loss
         loss.backward()
         grad_sign = xadv.grad.detach().sign()
-
-        xadv = xadv + batch_multiply(self.eps, grad_sign)
+        delta = batch_multiply(self.eps, grad_sign)
+        if y_x_score is not None:
+            delta = project_y_x(delta, y_x_score, gamma)
+        xadv = xadv + delta
         xadv = clamp(xadv, self.clip_min, self.clip_max)
         radv = xadv - x
         return xadv.detach(), radv.detach()
@@ -80,7 +84,7 @@ class FGMAttack(Attack, LabelMixin):
         if self.loss_fn is None:
             self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
 
-    def perturb(self, x, y=None):
+    def perturb(self, x, y=None, y_x_score=None, gamma=0.):
         """
         Given examples (x, y), returns their adversarial counterparts with an attack length of eps.
         Arguments:
@@ -102,7 +106,10 @@ class FGMAttack(Attack, LabelMixin):
             loss = -loss
         loss.backward()
         grad = normalize_by_pnorm(xadv.grad)
-        xadv = xadv + batch_multiply(self.eps, grad)
+        delta = batch_multiply(self.eps, grad)
+        if y_x_score is not None:
+            delta = project_y_x(delta, y_x_score, gamma)
+        xadv = xadv + delta
         xadv = clamp(xadv, self.clip_min, self.clip_max)
         radv = xadv - x
 
