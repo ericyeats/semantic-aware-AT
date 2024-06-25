@@ -30,10 +30,10 @@ parse.add_argument('--tau', type=float, default=0.995, help='Weight averaging de
 
 # extra args for score-based constraint
 parse.add_argument('--score', action='store_true', help='Adversarial training with EDM-based semantic projection')
-parse.add_argument('--gamma', help='Semantic cutoff value in [0, 1], default 0.3', type=float, default=0.3)
+parse.add_argument('--gamma', help='Semantic cutoff value in [0, 1], default 0.5', type=float, default=0.5)
 parse.add_argument('--score_network_pkl', help='Network pickle filename', metavar='PATH|URL', type=str)
 parse.add_argument('--time', help='Time in [0, 1] to which data should be diffused for average scores. default 0.1', type=float, default=0.1)
-parse.add_argument('--n_mc_samples', type=int, default=10, help='Number of samples for average score calculation')
+parse.add_argument('--n_mc_samples', type=int, default=20, help='Number of samples for average score calculation')
 
 args = parse.parse_args()
 # assert args.data in SEMISUP_DATASETS, f'Only data in {SEMISUP_DATASETS} is supported!'
@@ -149,7 +149,8 @@ for epoch in range(start_epoch, NUM_ADV_EPOCHS+1):
         shutil.copyfile(WEIGHTS, os.path.join(LOG_DIR, f'weights-best-epoch{str(epoch)}.pt'))
 
     logger.log('Time taken: {}'.format(format_time(time.time()-start)))
-    metrics = metrics.append(pd.DataFrame(epoch_metrics, index=[0]), ignore_index=True)
+    # metrics = metrics.append(pd.DataFrame(epoch_metrics, index=[0]), ignore_index=True) ### NOTE - DEPRECATED
+    metrics = pd.concat([metrics, pd.DataFrame(epoch_metrics, index=[0])], ignore_index=True)
     metrics.to_csv(os.path.join(LOG_DIR, 'stats_adv.csv'), index=False)
 
     

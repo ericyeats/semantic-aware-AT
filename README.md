@@ -1,3 +1,10 @@
+# Semantic-aware Adversarial Training
+
+Most of this code has been taken from this repository: https://github.com/wzekai99/DM-Improves-AT 
+
+Below is the original README from that repo.
+
+
 # Better Diffusion Models Further Improve Adversarial Training
 
 Code for the paper [Better Diffusion Models Further Improve Adversarial Training](https://arxiv.org/pdf/2302.04638.pdf) (ICML 2023).
