@@ -5,21 +5,23 @@ from dnnlib.util import open_url
 
 class MC_Score_EDM(torch.nn.Module):
 
-    def __init__(self, network_pkl, t: float, n_mc_samples: int = 10):
+    def __init__(self, network_pkl, t: float, n_mc_samples: int = 10, n_chunks: int = 1):
         super().__init__()
         self.t = t
         self.n_mc_samples = n_mc_samples
+        self.n_chunks = n_chunks
+        assert self.n_chunks > 0
         with open_url(network_pkl, verbose=True) as f:
             self.net = pickle.load(f)['ema']
 
 
-    def score_y_x(self, x: torch.Tensor, y: torch.Tensor, sigma_min=0.002, sigma_max=80,) -> torch.Tensor:
+    def score_y_x(self, x: torch.Tensor, y: torch.Tensor, n_samples: int = 10, sigma_min=0.002, sigma_max=80,) -> torch.Tensor:
         
         assert self.net.label_dim, "net must be conditional. found: {}".format(self.net.label_dim)
 
         # make sure y is one-hot encoded, duplicate for parallel processing
         y = torch.eye(self.net.label_dim, device=y.device)[y].to(x) # assume that y is flat tensor of ints/longs
-        y_dup = y[:, None, :].tile(1, self.n_mc_samples, 1).view(-1)
+        y_dup = y[:, None, :].tile(1, n_samples, 1).view(-1)
         # "duplicate" again for classifier-free guidance
         y_dup = torch.cat([y_dup, torch.zeros_like(y_dup)], dim=0)
 
@@ -29,8 +31,8 @@ class MC_Score_EDM(torch.nn.Module):
         sigma = (sigma_max - sigma_min) * self.t + sigma_min
         sigma = self.net.round_sigma(sigma).to(x) # following from generate.ema_sampler
 
-        # duplicate x by n_mc_samples
-        x_dup = x[:, None, :, :, :].tile(1, self.n_mc_samples, 1, 1, 1)
+        # duplicate x by n_samples
+        x_dup = x[:, None, :, :, :].tile(1, n_samples, 1, 1, 1)
         x_dup_shp = x_dup.shape
         # add noise
         x_dup = x_dup + torch.randn_like(x_dup) * sigma
@@ -50,4 +52,16 @@ class MC_Score_EDM(torch.nn.Module):
 
 
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        return self.score_y_x(x, y)
+        # estimate scores in chunks
+        results = torch.zeros_like(x)
+
+        # distribute the job evenly over the chunks
+        base_chunk_size = self.n_mc_samples//self.n_chunks # rounds down
+        remainder = self.n_mc_samples - (base_chunk_size*self.n_chunks)
+        for i in range(self.n_chunks):
+            cur_chunk_size = base_chunk_size + (1 if i < remainder else 0)
+            results += cur_chunk_size*self.score_y_x(x, y, n_samples=cur_chunk_size) 
+                
+        results /= self.n_mc_samples
+
+        return results

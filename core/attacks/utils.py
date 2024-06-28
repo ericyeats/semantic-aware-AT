@@ -216,13 +216,17 @@ def CWLoss(output, target, confidence=0):
 
 
 def project_y_x(delta, y_x_score, gamma=0.):
-    # calculate the inner product of delta and y_x_score
-    dsc_inner = (delta * (-y_x_score)).sum(dim=(1,2,3))
-    gamma_vec = gamma * (-y_x_score) / y_x_score.square().sum(dim=(1,2,3))[:, None, None, None]
-    gamma_vec_unit = gamma_vec / gamma_vec.square().sum(dim=(1,2,3)).sqrt()[:, None, None, None]
-    proj_delta_on_gamma_vec = (delta * gamma_vec_unit).sum(dim=(1,2,3))[:, None, None, None] * gamma_vec_unit
-    delta = delta.where(
-        (dsc_inner <= gamma)[:, None, None, None].expand_as(delta),
-        delta - (proj_delta_on_gamma_vec - gamma_vec)
+    y_x_score_norm = y_x_score.square().sum(dim=(1,2,3)).sqrt()[:, None, None, None]
+    y_x_score_unit = y_x_score / y_x_score_norm
+    # calculate projection of delta onto the negative score
+    proj_delta = (delta * (-y_x_score_unit)).sum(dim=(1,2,3))[:, None, None, None] * (-y_x_score_unit)
+    proj_delta_norm2 = proj_delta.square().sum(dim=(1,2,3))
+    # calculate the projection of the constraint onto the negative score
+    proj_gamma = (gamma / y_x_score_norm) * (-y_x_score_unit)
+    proj_gamma_norm2 = proj_gamma.square().sum(dim=(1,2,3))
+    delta = torch.where(
+        (proj_delta_norm2 > proj_gamma_norm2)[:, None, None, None].expand_as(delta),
+        delta - (proj_delta - proj_gamma),
+        delta
     )
     return delta

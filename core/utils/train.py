@@ -52,7 +52,7 @@ class Trainer(object):
         if self.params.score: # initalize a score model
             assert isinstance(self.params.time, float)
             assert isinstance(self.params.n_mc_samples, int)
-            score_model = MC_Score_EDM(self.params.score_network_pkl, self.params.time, self.params.n_mc_samples)
+            score_model = MC_Score_EDM(self.params.score_network_pkl, self.params.time, self.params.n_mc_samples, self.params.n_chunks)
             self.score_model = nn.DataParallel(score_model).to(device)
 
         

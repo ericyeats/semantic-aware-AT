@@ -34,6 +34,8 @@ parse.add_argument('--gamma', help='Semantic cutoff value in [0, 1], default 0.5
 parse.add_argument('--score_network_pkl', help='Network pickle filename', metavar='PATH|URL', type=str)
 parse.add_argument('--time', help='Time in [0, 1] to which data should be diffused for average scores. default 0.1', type=float, default=0.1)
 parse.add_argument('--n_mc_samples', type=int, default=20, help='Number of samples for average score calculation')
+parse.add_argument('--n_chunks', type=int, default=4, help='Number of chunks for the score estimation network forward pass')
+parse.add_argument('--verbose', action='store_true')
 
 args = parse.parse_args()
 # assert args.data in SEMISUP_DATASETS, f'Only data in {SEMISUP_DATASETS} is supported!'
@@ -116,7 +118,7 @@ for epoch in range(start_epoch, NUM_ADV_EPOCHS+1):
     if args.scheduler:
         last_lr = trainer.scheduler.get_last_lr()[0]
     
-    res = trainer.train(train_dataloader, epoch=epoch, adversarial=True)
+    res = trainer.train(train_dataloader, epoch=epoch, adversarial=True, verbose=args.verbose)
     test_acc = trainer.eval(test_dataloader)
     
     logger.log('Loss: {:.4f}.\tLR: {:.4f}'.format(res['loss'], last_lr))
