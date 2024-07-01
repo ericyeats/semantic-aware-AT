@@ -36,6 +36,7 @@ parse.add_argument('--time', help='Time in [0, 1] to which data should be diffus
 parse.add_argument('--n_mc_samples', type=int, default=20, help='Number of samples for average score calculation')
 parse.add_argument('--n_chunks', type=int, default=4, help='Number of chunks for the score estimation network forward pass')
 parse.add_argument('--verbose', action='store_true')
+parse.add_argument('--standard', action='store_true')
 
 args = parse.parse_args()
 # assert args.data in SEMISUP_DATASETS, f'Only data in {SEMISUP_DATASETS} is supported!'
@@ -118,7 +119,7 @@ for epoch in range(start_epoch, NUM_ADV_EPOCHS+1):
     if args.scheduler:
         last_lr = trainer.scheduler.get_last_lr()[0]
     
-    res = trainer.train(train_dataloader, epoch=epoch, adversarial=True, verbose=args.verbose)
+    res = trainer.train(train_dataloader, epoch=epoch, adversarial=(not args.standard), verbose=args.verbose)
     test_acc = trainer.eval(test_dataloader)
     
     logger.log('Loss: {:.4f}.\tLR: {:.4f}'.format(res['loss'], last_lr))
@@ -129,13 +130,14 @@ for epoch in range(start_epoch, NUM_ADV_EPOCHS+1):
     epoch_metrics = {'train_'+k: v for k, v in res.items()}
     epoch_metrics.update({'epoch': epoch, 'lr': last_lr, 'test_clean_acc': test_acc, 'test_adversarial_acc': ''})
     
-    if epoch % args.adv_eval_freq == 0 or epoch == NUM_ADV_EPOCHS:        
-        test_adv_acc = trainer.eval(test_dataloader, adversarial=True)
-        logger.log('Adversarial Accuracy-\tTrain: {:.2f}%.\tTest: {:.2f}%.'.format(res['adversarial_acc']*100, 
-                                                                                   test_adv_acc*100))
-        epoch_metrics.update({'test_adversarial_acc': test_adv_acc})
-    else:
-        logger.log('Adversarial Accuracy-\tTrain: {:.2f}%.'.format(res['adversarial_acc']*100))
+    if not args.standard:
+        if epoch % args.adv_eval_freq == 0 or epoch == NUM_ADV_EPOCHS:        
+            test_adv_acc = trainer.eval(test_dataloader, adversarial=True)
+            logger.log('Adversarial Accuracy-\tTrain: {:.2f}%.\tTest: {:.2f}%.'.format(res['adversarial_acc']*100, 
+                                                                                    test_adv_acc*100))
+            epoch_metrics.update({'test_adversarial_acc': test_adv_acc})
+        else:
+            logger.log('Adversarial Accuracy-\tTrain: {:.2f}%.'.format(res['adversarial_acc']*100))
     
     eval_adv_acc = trainer.eval(eval_dataloader, adversarial=True)
     logger.log('Adversarial Accuracy-\tEval: {:.2f}%.'.format(eval_adv_acc*100))
@@ -162,7 +164,7 @@ for epoch in range(start_epoch, NUM_ADV_EPOCHS+1):
 train_acc = res['clean_acc'] if 'clean_acc' in res else trainer.eval(train_dataloader)
 logger.log('\nTraining completed.')
 logger.log('Standard Accuracy-\tTrain: {:.2f}%.\tTest: {:.2f}%.'.format(train_acc*100, old_score[0]*100))
-if NUM_ADV_EPOCHS > 0:
+if NUM_ADV_EPOCHS > 0 and (not args.standard):
     logger.log('Adversarial Accuracy-\tTrain: {:.2f}%.\tEval: {:.2f}%.'.format(res['adversarial_acc']*100, old_score[1]*100)) 
 
 logger.log('Script Completed.')

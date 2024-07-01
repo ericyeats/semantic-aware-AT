@@ -119,7 +119,8 @@ class Trainer(object):
                 y_x_score = None
                 if self.params.score:
                     with torch.no_grad():
-                        y_x_score = self.score_model(x, y) # pass this to the attacks
+                        x_centered = x * 2. - 1.
+                        y_x_score = 2.*self.score_model(x_centered, y) # pass this to the attacks
 
                 if self.params.beta is not None and self.params.mart:
                     loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
