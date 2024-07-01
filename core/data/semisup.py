@@ -6,7 +6,7 @@ import torch
 
 
 def get_semisup_dataloaders(train_dataset, test_dataset, val_dataset=None, batch_size=256, batch_size_test=256, num_workers=4, 
-                            unsup_fraction=0.5):
+                            unsup_fraction=0.5, shuffle_train=True):
     """
     Return dataloaders with custom sampling of pseudo-labeled data.
     """
@@ -17,7 +17,8 @@ def get_semisup_dataloaders(train_dataset, test_dataset, val_dataset=None, batch
 
     # kwargs = {'num_workers': num_workers, 'pin_memory': torch.cuda.is_available() }
     kwargs = {'num_workers': num_workers, 'pin_memory': False}    
-    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_sampler=train_batch_sampler, **kwargs)
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_sampler=train_batch_sampler, **kwargs) if shuffle_train else \
+        torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False, **kwargs)
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size_test, shuffle=False, **kwargs)
     
     if val_dataset:

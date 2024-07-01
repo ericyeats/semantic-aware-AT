@@ -30,6 +30,7 @@ def main(args):
     BATCH_SIZE = args.batch_size
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    # load in the training data. do not shuffle it
     val = args.data in SEMISUP_DATASETS
     loaded_data = load_data(
         DATA_DIR, BATCH_SIZE, BATCH_SIZE, use_augmentation='none', use_consistency=args.consistency, shuffle_train=False, 
@@ -62,8 +63,35 @@ def main(args):
         # un-normalize and save. for dlogp(x)/dx, multiply by 2.
         x_score = (x_score * 2.).cpu()
 
+        # save each precomputed batch as a torch tensor file. these will be loaded and aggregated into a dataset later
         torch.save(x_score, os.path.join(SCORE_DIR, 'batch_{}.pt'.format(i)))
     
+
+    print("Done computing scores...")
+
+    ### IMPL GOAL 1
+
+    # instantiate the CIFAR10 training dataset (wrapped in unshuffled dataloader of same batch size)
+    # do not use augmentations other than ToTensor
+
+    # together with the CIFAR10 training dataset, save the original image (plus score) in a channel-stacked format
+    #       for example, for a cifar image x (C, H, W) = (3, 32, 32), save the cifar image with the score concatenated such that the result is (6, 32, 32)
+    #       then, we can get x_image, x_score = x.chunk(2) once loaded
+
+    #       we could try to save it in the same format as the original CIFAR10 dataset, but this *might* cause problems if we need a high-precision format for the scores
+    #       it may be easiest to just save the dataset+scores as one big tensor. CIFAR10 isn't too big, so this may be ok to have in CPU memory
+    
+    # in another file (e.g., core/data/cifar10score), extend torchvision.datasets.CIFAR10 to load data from the above format.
+    # add in logic (from train-wa.py args to gowal21uncovering/watrain.py training loop) to run an experiment with score projection training
+    
+
+    ### IMPL GOAL 2
+
+    # with a corresponding command line arg, write a baseline experiment where our "score projection vector" is random.
+    #       we would expect the AdvTrain adversarial attack to have zero cosine similarity with a random vector, so projected adversarial
+    #       training with a random vector should yield the exact same result as Madry adversarial training
+    #       
+    #       This confirms that it is projection specifically along the EDM score direction, not just any subspace projection, which prevents performance loss
 
 
     

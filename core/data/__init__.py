@@ -77,11 +77,11 @@ def load_data(data_dir, batch_size=256, batch_size_test=256, num_workers=4, use_
     if dataset in SEMISUP_DATASETS:
         if validation:
             train_dataloader, test_dataloader, val_dataloader = get_semisup_dataloaders(
-                train_dataset, test_dataset, val_dataset, batch_size, batch_size_test, num_workers, unsup_fraction
+                train_dataset, test_dataset, val_dataset, batch_size, batch_size_test, num_workers, unsup_fraction, shuffle_train=shuffle_train
             )
         else:
             train_dataloader, test_dataloader = get_semisup_dataloaders(
-                train_dataset, test_dataset, None, batch_size, batch_size_test, num_workers, unsup_fraction
+                train_dataset, test_dataset, None, batch_size, batch_size_test, num_workers, unsup_fraction, shuffle_train=shuffle_train
             )
     else:
         #pin_memory = torch.cuda.is_available()
