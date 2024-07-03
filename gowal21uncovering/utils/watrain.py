@@ -41,7 +41,7 @@ class WATrainer(Trainer):
                                          args.attack_step)
         num_samples = 50000 if 'cifar' in self.params.data else 73257
         num_samples = 100000 if 'tiny-imagenet' in self.params.data else num_samples
-        if self.params.data in ['cifar10', 'cifar10s', 'svhn', 'svhns']:
+        if self.params.data in ['cifar10', 'cifar10_score', 'cifar10s', 'svhn', 'svhns']:
             self.num_classes = 10
         elif self.params.data in ['cifar100', 'cifar100s']:
             self.num_classes = 100
@@ -90,8 +90,14 @@ class WATrainer(Trainer):
             elif global_step == 1:
                 set_bn_momentum(self.model, momentum=0.01)
             update_iter += 1
-            
-            x, y = data
+
+            if self.params.data in ['cifar10_score']:
+                x, y_x_score, y = data
+                x, y_x_score, y = x.to(device), y_x_score.to(device), y.to(device)
+            else:
+                x, y = data
+                y_x_score = None
+
             if self.params.consistency:
                 x_aug1, x_aug2, y = x[0].to(device), x[1].to(device), y.to(device)
                 if self.params.beta is not None:
@@ -110,12 +116,13 @@ class WATrainer(Trainer):
                     x, y = x.to(device), y.to(device)
                 
                 if adversarial:
-
-                    y_x_score = None
-                    if self.params.score: # estimate the scores at this x,y pair
-                        with torch.no_grad():
-                            x_centered = x * 2. - 1.
-                            y_x_score = 2.*self.score_model(x_centered, y) # pass this to the attacks
+                    if y_x_score is None:
+                        if self.params.score:  # estimate the scores at this x,y pair
+                            with torch.no_grad():
+                                x_centered = x * 2. - 1.
+                                y_x_score = 2.*self.score_model(x_centered, y)  # pass this to the attacks
+                        elif self.params.random_proj:
+                            y_x_score = torch.randn_like(x)  # random projection
 
                     if self.params.beta is not None and self.params.mart:
                         loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
