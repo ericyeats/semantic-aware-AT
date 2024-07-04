@@ -9,15 +9,17 @@ from .cifar100s import load_cifar100s
 from .svhns import load_svhns
 from .tiny_imagenet import load_tinyimagenet
 from .tiny_imagenets import load_tinyimagenets
+from .cifar10score import load_cifar10_score
 
 from .semisup import get_semisup_dataloaders
 
 
 SEMISUP_DATASETS = ['cifar10s', 'cifar100s', 'svhns', 'tiny-imagenets']
-DATASETS = ['cifar10', 'svhn', 'cifar100', 'tiny-imagenet'] + SEMISUP_DATASETS
+DATASETS = ['cifar10', 'svhn', 'cifar100', 'tiny-imagenet', 'cifar10_score'] + SEMISUP_DATASETS
 
 _LOAD_DATASET_FN = {
     'cifar10': load_cifar10,
+    'cifar10_score': load_cifar10_score,
     'cifar100': load_cifar100,
     'svhn': load_svhn,
     'tiny-imagenet': load_tinyimagenet,
@@ -37,7 +39,7 @@ def get_data_info(data_dir):
     dataset = os.path.basename(os.path.normpath(data_dir))
     if 'cifar100' in data_dir:
         from .cifar100 import DATA_DESC
-    elif 'cifar10' in data_dir:
+    elif 'cifar10' or 'cifar10_score' in data_dir:
         from .cifar10 import DATA_DESC
     elif 'svhn' in data_dir:
         from .svhn import DATA_DESC

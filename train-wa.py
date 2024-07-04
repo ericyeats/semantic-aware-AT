@@ -37,6 +37,7 @@ parse.add_argument('--n_mc_samples', type=int, default=20, help='Number of sampl
 parse.add_argument('--n_chunks', type=int, default=4, help='Number of chunks for the score estimation network forward pass')
 parse.add_argument('--verbose', action='store_true')
 parse.add_argument('--standard', action='store_true')
+parse.add_argument('--random_proj', action='store_true', help='Baseline with random score projection vector')
 
 args = parse.parse_args()
 # assert args.data in SEMISUP_DATASETS, f'Only data in {SEMISUP_DATASETS} is supported!'
