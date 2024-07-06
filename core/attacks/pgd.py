@@ -53,7 +53,12 @@ def perturb_iterative(xvar, yvar, predict, nb_iter, eps, eps_iter, loss_fn, delt
             grad_sign = delta.grad.data.sign()
             delta.data = delta.data + batch_multiply(eps_iter, grad_sign)
             if y_x_score is not None:
-                delta.data = project_y_x(delta.data, y_x_score, gamma)
+                if isinstance(y_x_score, torch.nn.Module):
+                    with torch.no_grad():
+                        _y_x_score = 2.*y_x_score(2.*(delta.data + xvar) - 1., yvar)
+                else:
+                    _y_x_score = y_x_score
+                delta.data = project_y_x(delta.data, _y_x_score, gamma)
             delta.data = batch_clamp(eps, delta.data)
             delta.data = clamp(xvar.data + delta.data, clip_min, clip_max) - xvar.data
         elif ord == 2:
@@ -61,7 +66,12 @@ def perturb_iterative(xvar, yvar, predict, nb_iter, eps, eps_iter, loss_fn, delt
             grad = normalize_by_pnorm(grad)
             delta.data = delta.data + batch_multiply(eps_iter, grad)
             if y_x_score is not None:
-                delta.data = project_y_x(delta.data, y_x_score, gamma)
+                if isinstance(y_x_score, torch.nn.Module):
+                    with torch.no_grad():
+                        _y_x_score = 2.*y_x_score(2.*(delta.data + xvar) - 1., yvar)
+                else:
+                    _y_x_score = y_x_score
+                delta.data = project_y_x(delta.data, _y_x_score, gamma)
             delta.data = clamp(xvar.data + delta.data, clip_min, clip_max) - xvar.data
             if eps is not None:
                 delta.data = clamp_by_pnorm(delta.data, ord, eps)

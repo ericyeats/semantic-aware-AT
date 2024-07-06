@@ -118,9 +118,13 @@ class WATrainer(Trainer):
                 if adversarial:
                     if y_x_score is None:
                         if self.params.score:  # estimate the scores at this x,y pair
-                            with torch.no_grad():
-                                x_centered = x * 2. - 1.
-                                y_x_score = 2.*self.score_model(x_centered, y)  # pass this to the attacks
+                            if self.params.score_live:
+                                y_x_score = self.score_model
+                            else:
+                                with torch.no_grad():
+                                    x_centered = x * 2. - 1.
+                                    y_x_score = 2.*self.score_model(x_centered, y)  # pass this to the attacks
+                            
                         elif self.params.random_proj:
                             y_x_score = torch.randn_like(x)  # random projection
 

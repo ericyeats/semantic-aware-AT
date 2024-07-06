@@ -38,6 +38,7 @@ parse.add_argument('--n_chunks', type=int, default=4, help='Number of chunks for
 parse.add_argument('--verbose', action='store_true')
 parse.add_argument('--standard', action='store_true')
 parse.add_argument('--random_proj', action='store_true', help='Baseline with random score projection vector')
+parse.add_argument('--score_live', action='store_true', help="Estimate score at each step in adversarial example calculation")
 
 args = parse.parse_args()
 # assert args.data in SEMISUP_DATASETS, f'Only data in {SEMISUP_DATASETS} is supported!'

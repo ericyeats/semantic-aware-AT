@@ -118,9 +118,12 @@ class Trainer(object):
             if adversarial:
                 y_x_score = None
                 if self.params.score:
-                    with torch.no_grad():
-                        x_centered = x * 2. - 1.
-                        y_x_score = 2.*self.score_model(x_centered, y) # pass this to the attacks
+                    if self.params.score_live:
+                        y_x_score = self.score_model
+                    else:
+                        with torch.no_grad():
+                            x_centered = x * 2. - 1.
+                            y_x_score = 2.*self.score_model(x_centered, y) # pass this to the attacks
 
                 if self.params.beta is not None and self.params.mart:
                     loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
