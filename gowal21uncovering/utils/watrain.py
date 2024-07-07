@@ -18,8 +18,11 @@ from core.utils import Trainer
 from core.utils import set_bn_momentum
 from core.utils import seed
 
+from core.data import SCORE_DATASETS
+
 from .trades import trades_loss, trades_loss_LSE
 from .cutmix import cutmix
+
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -91,12 +94,13 @@ class WATrainer(Trainer):
                 set_bn_momentum(self.model, momentum=0.01)
             update_iter += 1
 
-            if self.params.data in ['cifar10_score']:
-                x, y_x_score, y = data
-                x, y_x_score, y = x.to(device), y_x_score.to(device), y.to(device)
-            else:
-                x, y = data
-                y_x_score = None
+            x, y = data
+            x = x.to(device)
+            y = y.to(device)
+
+            y_x_score = None
+            if self.params.data in SCORE_DATASETS:
+                x, y_x_score = x.chunk(2, dim=1)
 
             if self.params.consistency:
                 x_aug1, x_aug2, y = x[0].to(device), x[1].to(device), y.to(device)
@@ -116,14 +120,10 @@ class WATrainer(Trainer):
                     x, y = x.to(device), y.to(device)
                 
                 if adversarial:
-                    if y_x_score is None:
-                        if self.params.score:  # estimate the scores at this x,y pair
-                            with torch.no_grad():
-                                x_centered = x * 2. - 1.
-                                y_x_score = 2.*self.score_model(x_centered, y)  # pass this to the attacks
-                        elif self.params.random_proj:
-                            y_x_score = torch.randn_like(x)  # random projection
 
+                    if self.params.random_proj:
+                        y_x_score = torch.randn_like(x)  # random projection
+                    
                     if self.params.beta is not None and self.params.mart:
                         loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
                     elif self.params.beta is not None and self.params.LSE:

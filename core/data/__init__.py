@@ -9,17 +9,18 @@ from .cifar100s import load_cifar100s
 from .svhns import load_svhns
 from .tiny_imagenet import load_tinyimagenet
 from .tiny_imagenets import load_tinyimagenets
-from .cifar10score import load_cifar10_score
+from .cifar10score import load_cifar10score
 
 from .semisup import get_semisup_dataloaders
 
 
+SCORE_DATASETS = ['cifar10score',]
 SEMISUP_DATASETS = ['cifar10s', 'cifar100s', 'svhns', 'tiny-imagenets']
-DATASETS = ['cifar10', 'svhn', 'cifar100', 'tiny-imagenet', 'cifar10_score'] + SEMISUP_DATASETS
+DATASETS = ['cifar10', 'svhn', 'cifar100', 'tiny-imagenet'] + SCORE_DATASETS + SEMISUP_DATASETS
 
 _LOAD_DATASET_FN = {
     'cifar10': load_cifar10,
-    'cifar10_score': load_cifar10_score,
+    'cifar10score': load_cifar10score,
     'cifar100': load_cifar100,
     'svhn': load_svhn,
     'tiny-imagenet': load_tinyimagenet,
@@ -52,7 +53,7 @@ def get_data_info(data_dir):
 
 
 def load_data(data_dir, batch_size=256, batch_size_test=256, num_workers=4, use_augmentation='base', use_consistency=False, shuffle_train=True, 
-              aux_data_filename=None, unsup_fraction=None, validation=False):
+              aux_data_filename=None, unsup_fraction=None, validation=False, time=None, n_mc_samples=None):
     """
     Returns train, test datasets and dataloaders.
     Arguments:
@@ -74,7 +75,10 @@ def load_data(data_dir, batch_size=256, batch_size_test=256, num_workers=4, use_
         train_dataset, test_dataset, val_dataset = load_dataset_fn(data_dir=data_dir, use_augmentation=use_augmentation, use_consistency=use_consistency,
                                                                    aux_data_filename=aux_data_filename, validation=True)
     else:
-        train_dataset, test_dataset = load_dataset_fn(data_dir=data_dir, use_augmentation=use_augmentation)
+        if dataset in SCORE_DATASETS:
+            train_dataset, test_dataset = load_dataset_fn(data_dir=data_dir, use_augmentation=use_augmentation, time=time, n_mc_samples=n_mc_samples)
+        else:
+            train_dataset, test_dataset = load_dataset_fn(data_dir=data_dir, use_augmentation=use_augmentation)
        
     if dataset in SEMISUP_DATASETS:
         if validation:

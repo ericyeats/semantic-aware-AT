@@ -1,3 +1,4 @@
 *__pycache__*
-logs/*
-trained_models/*
+logs/
+trained_models/
+score_data/

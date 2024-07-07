@@ -18,7 +18,8 @@ from .utils import seed
 from .mart import mart_loss
 from .rst import CosineLR
 from .trades import trades_loss
-from mc_score import MC_Score_EDM
+# from mc_score import MC_Score_EDM
+from ..data import SCORE_DATASETS
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -49,11 +50,11 @@ class Trainer(object):
         self.attack, self.eval_attack = self.init_attack(self.model, self.criterion, self.params.attack, self.params.attack_eps, 
                                                          self.params.attack_iter, self.params.attack_step)
 
-        if self.params.score: # initalize a score model
-            assert isinstance(self.params.time, float)
-            assert isinstance(self.params.n_mc_samples, int)
-            score_model = MC_Score_EDM(self.params.score_network_pkl, self.params.time, self.params.n_mc_samples, self.params.n_chunks)
-            self.score_model = nn.DataParallel(score_model).to(device)
+        # if self.params.score: # initalize a score model
+        #     assert isinstance(self.params.time, float)
+        #     assert isinstance(self.params.n_mc_samples, int)
+        #     score_model = MC_Score_EDM(self.params.score_network_pkl, self.params.time, self.params.n_mc_samples, self.params.n_chunks)
+        #     self.score_model = nn.DataParallel(score_model).to(device)
 
         
     
@@ -114,13 +115,17 @@ class Trainer(object):
         for data in tqdm(dataloader, desc='Epoch {}: '.format(epoch), disable=not verbose):
             x, y = data
             x, y = x.to(device), y.to(device)
+
+            y_x_score = None
+            if self.params.data in SCORE_DATASETS:
+                x, y_x_score = x.chunk(2, dim=1)
             
             if adversarial:
-                y_x_score = None
-                if self.params.score:
-                    with torch.no_grad():
-                        x_centered = x * 2. - 1.
-                        y_x_score = 2.*self.score_model(x_centered, y) # pass this to the attacks
+                # y_x_score = None
+                # if self.params.score:
+                #     with torch.no_grad():
+                #         x_centered = x * 2. - 1.
+                #         y_x_score = 2.*self.score_model(x_centered, y) # pass this to the attacks
 
                 if self.params.beta is not None and self.params.mart:
                     loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
