@@ -127,9 +127,9 @@ class WATrainer(Trainer):
                     if self.params.beta is not None and self.params.mart:
                         loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
                     elif self.params.beta is not None and self.params.LSE:
-                        loss, batch_metrics = self.trades_loss_LSE(x, y, beta=self.params.beta)
+                        loss, batch_metrics = self.trades_loss_LSE(x, y, beta=self.params.beta, y_x_score=y_x_score)
                     elif self.params.beta is not None:
-                        loss, batch_metrics = self.trades_loss(x, y, beta=self.params.beta)
+                        loss, batch_metrics = self.trades_loss(x, y, beta=self.params.beta, y_x_score=y_x_score)
                     else:
                         loss, batch_metrics = self.adversarial_loss(x, y, y_x_score=y_x_score)
                 else:
@@ -156,14 +156,14 @@ class WATrainer(Trainer):
         return dict(metrics.mean())
     
     
-    def trades_loss(self, x, y, beta):
+    def trades_loss(self, x, y, beta, y_x_score=None):
         """
         TRADES training.
         """
         loss, batch_metrics = trades_loss(self.model, x, y, self.optimizer, step_size=self.params.attack_step, 
                                           epsilon=self.params.attack_eps, perturb_steps=self.params.attack_iter, 
                                           beta=beta, attack=self.params.attack, label_smoothing=self.params.ls,
-                                          use_cutmix=self.params.CutMix)
+                                          use_cutmix=self.params.CutMix, y_x_score=y_x_score, gamma=self.params.gamma)
         return loss, batch_metrics
 
     def trades_loss_consistency(self, x_aug1, x_aug2, y, beta):
@@ -177,7 +177,7 @@ class WATrainer(Trainer):
                                           use_cutmix=self.params.CutMix, use_consistency=True, cons_lambda=self.params.cons_lambda, cons_tem=self.params.cons_tem)
         return loss, batch_metrics
 
-    def trades_loss_LSE(self, x, y, beta):
+    def trades_loss_LSE(self, x, y, beta, y_x_score=None):
         """
         TRADES training with LSE loss.
         """
@@ -186,7 +186,8 @@ class WATrainer(Trainer):
                                           beta=beta, attack=self.params.attack, label_smoothing=self.params.ls,
                                           clip_value=self.params.clip_value,
                                           use_cutmix=self.params.CutMix,
-                                          num_classes=self.num_classes)
+                                          num_classes=self.num_classes,
+                                          y_x_score=y_x_score, gamma=self.params.gamma)
         return loss, batch_metrics  
 
     
@@ -199,6 +200,8 @@ class WATrainer(Trainer):
         
         for x, y in dataloader:
             x, y = x.to(device), y.to(device)
+            if self.params.data in SCORE_DATASETS and x.shape[1] == 6: # score dataset
+                x, x_score = x.chunk(2, dim=1)
             if adversarial:
                 with ctx_noparamgrad_and_eval(self.wa_model):
                     x_adv, _ = self.eval_attack.perturb(x, y)            

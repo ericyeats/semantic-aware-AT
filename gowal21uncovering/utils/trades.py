@@ -7,6 +7,7 @@ import torch.optim as optim
 from core.metrics import accuracy
 from core.utils import SmoothCrossEntropyLoss
 from core.utils import track_bn_stats
+from core.attacks.utils import project_y_x
 
 
 def squared_l2_norm(x):
@@ -34,7 +35,7 @@ def _jensen_shannon_div(logit1, logit2, T=1.):
 
 
 def trades_loss(model, x_natural, y, optimizer, step_size=0.003, epsilon=0.031, perturb_steps=10, beta=1.0, 
-                attack='linf-pgd', label_smoothing=0.1, use_cutmix=False, use_consistency=False, cons_lambda=0.0, cons_tem=0.0):
+                attack='linf-pgd', label_smoothing=0.1, use_cutmix=False, use_consistency=False, cons_lambda=0.0, cons_tem=0.0, y_x_score=None, gamma=0.):
     """
     TRADES training (Zhang et al, 2019).
     """
@@ -61,6 +62,10 @@ def trades_loss(model, x_natural, y, optimizer, step_size=0.003, epsilon=0.031, 
                 loss_kl = criterion_kl(F.log_softmax(model(x_adv), dim=1), p_natural)
             grad = torch.autograd.grad(loss_kl, [x_adv])[0]
             x_adv = x_adv.detach() + step_size * torch.sign(grad.detach())
+            if y_x_score is not None:
+                delta = x_adv - x_natural
+                delta = project_y_x(delta, y_x_score, gamma)
+                x_adv = x_natural + delta
             x_adv = torch.min(torch.max(x_adv, x_natural - epsilon), x_natural + epsilon)
             x_adv = torch.clamp(x_adv, 0.0, 1.0)
     
@@ -88,6 +93,8 @@ def trades_loss(model, x_natural, y, optimizer, step_size=0.003, epsilon=0.031, 
             optimizer_delta.step()
 
             # projection
+            if y_x_score is not None:
+                delta.data = project_y_x(delta.data, y_x_score, gamma)
             delta.data.add_(x_natural)
             delta.data.clamp_(0, 1).sub_(x_natural)
             delta.data.renorm_(p=2, dim=0, maxnorm=epsilon)
@@ -128,7 +135,7 @@ def trades_loss(model, x_natural, y, optimizer, step_size=0.003, epsilon=0.031, 
 
 
 def trades_loss_LSE(model, x_natural, y, optimizer, step_size=0.003, epsilon=0.031, perturb_steps=10, beta=1.0, 
-                attack='linf-pgd', label_smoothing=0.1, clip_value=0, use_cutmix=False, num_classes=10):
+                attack='linf-pgd', label_smoothing=0.1, clip_value=0, use_cutmix=False, num_classes=10, y_x_score=None, gamma=0.):
     """
     SCORE training (Ours).
     """
@@ -155,6 +162,10 @@ def trades_loss_LSE(model, x_natural, y, optimizer, step_size=0.003, epsilon=0.0
                 loss_lse = torch.sum((output_adv - p_natural) ** 2)
             grad = torch.autograd.grad(loss_lse, [x_adv])[0]
             x_adv = x_adv.detach() + step_size * torch.sign(grad.detach())
+            if y_x_score is not None:
+                delta = x_adv - x_natural
+                delta = project_y_x(delta, y_x_score, gamma)
+                x_adv = x_natural + delta
             x_adv = torch.min(torch.max(x_adv, x_natural - epsilon), x_natural + epsilon)
             x_adv = torch.clamp(x_adv, 0.0, 1.0)
     elif attack == 'l2-pgd':
@@ -183,6 +194,8 @@ def trades_loss_LSE(model, x_natural, y, optimizer, step_size=0.003, epsilon=0.0
             optimizer_delta.step()
 
             # projection
+            if y_x_score is not None:
+                delta.data = project_y_x(delta.data, y_x_score, gamma)
             delta.data.add_(x_natural)
             delta.data.clamp_(0, 1).sub_(x_natural)
             delta.data.renorm_(p=2, dim=0, maxnorm=epsilon)

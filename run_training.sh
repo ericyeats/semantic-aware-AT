@@ -35,7 +35,7 @@
 
 python train-wa.py --data-dir ./score_data \
     --log-dir 'trained_models' \
-    --desc 'WRN28-10Swish_cifar10_lr0p2_CARAT_g0p0_n40_t0p2_epoch100_bs512' \
+    --desc 'WRN28-10Swish_cifar10_lr0p2_SPAT_g0p0_n40_t0p2_epoch100_bs512' \
     --data cifar10score \
     --batch-size 512 \
     --batch-size-validation 512 \

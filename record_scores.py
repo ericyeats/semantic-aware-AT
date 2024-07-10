@@ -48,7 +48,7 @@ def main(args):
         del train_dataset, test_dataset, test_dataloader
 
 
-    score_net = MC_Score_EDM(args.score_network_pkl, args.time, args.n_mc_samples, n_chunks=args.n_chunks)
+    score_net = MC_Score_EDM(args.score_network_pkl_cond, args.score_network_pkl_uncond, args.time, args.n_mc_samples, n_chunks=args.n_chunks)
     score_net = nn.DataParallel(score_net).to(device)
 
     # begin loading data
@@ -129,7 +129,8 @@ if __name__ == "__main__":
     parser.add_argument('--batch-size', type=int, default=1024, help='Batch size for evaluation.')
     parser.add_argument('--score_data_name', type=str, default=None, help='Name of folder to save the score data in. Defaults to <data>_score_t<time>_mc<n_mc_samples>')
 
-    parser.add_argument('--score_network_pkl', help='Network pickle filename', metavar='PATH|URL', type=str)
+    parser.add_argument('--score_network_pkl_cond', help='Conditional Network pickle filename', metavar='PATH|URL', type=str)
+    parser.add_argument('--score_network_pkl_uncond', help='Unconditional Network pickle filename', metavar='PATH|URL', type=str)
     parser.add_argument('--time', help='Time in [0, 1] to which data should be diffused for average scores. default 0.1', type=float, default=0.1)
     parser.add_argument('--n_mc_samples', type=int, default=40, help='Number of samples for average score calculation')
     parser.add_argument('--n_chunks', type=int, default=10, help='Number of chunks for the score estimation network forward pass')
