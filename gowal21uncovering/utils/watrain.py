@@ -44,7 +44,7 @@ class WATrainer(Trainer):
                                          args.attack_step)
         num_samples = 50000 if 'cifar' in self.params.data else 73257
         num_samples = 100000 if 'tiny-imagenet' in self.params.data else num_samples
-        if self.params.data in ['cifar10', 'cifar10_score', 'cifar10s', 'svhn', 'svhns']:
+        if self.params.data in ['cifar10', 'cifar10score', 'cifar10s', 'svhn', 'svhns']:
             self.num_classes = 10
         elif self.params.data in ['cifar100', 'cifar100s']:
             self.num_classes = 100

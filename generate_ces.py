@@ -191,7 +191,11 @@ def main(network_pkl, outdir, subdirs, base_indices, class_num, max_batch_size, 
                 # get the data for this rank. use this to adjust the sampling function for ce_generation
                 base_data = base_dataset[batch_indices]
                 def _net(x_hat, t_hat, class_labels):
-                    # 
+                    # add together score estimates from the diffusion model with scores of the neighborhood.
+                    # solution trajectories should point towards the mean of the data
+                    
+                    # D(x,t) = t^2 dlogp(x,t) + x
+                    # D*(x,t) = t^2 (dlogp(x,t) + dlogq(x,t)) + x
 
                 # Pick latents and labels.
                 rnd = StackedRandomGenerator(device, batch_indices + (ce_idx*len(base_indices)))
