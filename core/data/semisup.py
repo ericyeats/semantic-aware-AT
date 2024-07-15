@@ -39,8 +39,8 @@ class SemiSupervisedDataset(torch.utils.data.Dataset):
 
 
         if validation:
-            self.dataset.data = self.dataset.data[1024:]
-            self.dataset.targets = self.dataset.targets[1024:]
+            self.dataset.data = self.dataset.data[:-1024]
+            self.dataset.targets = self.dataset.targets[:-1024]
         
         self.train = train
 
@@ -74,6 +74,8 @@ class SemiSupervisedDataset(torch.utils.data.Dataset):
                     aux_targets = aux['label']
                 
                 orig_len = len(self.data)
+                self.orig_len = orig_len
+
 
                 if aux_take_amount is not None:
                     rng_state = np.random.get_state()
@@ -136,8 +138,8 @@ class SemiSupervisedDatasetSVHN(torch.utils.data.Dataset):
 
 
         if validation:
-            self.dataset.data = self.dataset.data[1024:]
-            self.dataset.labels = self.dataset.labels[1024:]
+            self.dataset.data = self.dataset.data[:-1024]
+            self.dataset.targets = self.dataset.targets[:-1024]
         
         self.train = train
 

@@ -9,11 +9,8 @@ import os
 import argparse
 import numpy as np
 
-from torchvision import transforms
 import torch
 from torch import nn
-from torch.nn import DataParallel
-from torch.utils.data import DataLoader, Dataset
 from torchvision.datasets import CIFAR10
 from torchvision.transforms import ToTensor
 
@@ -35,6 +32,7 @@ parser.add_argument('--batch_size', default=3000, type=int,
                     help='batch size of testing')
 parser.add_argument('--class_num', default=10, type=int,
                     help='number of the class')
+parser.add_argument('--base_dataset', default='~/data/cifar10', type=str, help='base dataset path')
 args = parser.parse_args()
 
 
@@ -62,7 +60,7 @@ for class_iter in range(args.class_num):
     print(f'processing {class_iter}-th class')
 
     data = np.load(os.path.join(args.data_dir, str(class_iter)+'.npy'))
-    unlabeled_data = CIFAR10('../cifar-data', train=False, transform=ToTensor())
+    unlabeled_data = CIFAR10(args.base_dataset, train=False, transform=ToTensor())
     unlabeled_data.data = data
     unlabeled_data.targets = [class_iter for _ in range(unlabeled_data.data.shape[0])]
     data_loader = torch.utils.data.DataLoader(unlabeled_data,
@@ -80,8 +78,10 @@ for class_iter in range(args.class_num):
             print('Class %d Done %d/%d' % (class_iter, i+1, len(data_loader)))
 
     num_class_images = int(unlabeled_data.data.shape[0]*args.top_scale)
-    mask = np.argsort(np.concatenate(confidence))[::-1][:num_class_images]
+    confidence = np.concatenate(confidence)
+    mask = np.argsort(confidence)[::-1][:num_class_images]
+    print("Cutoff Confidence: {:1.2f}".format(confidence[mask[-1]]))
     final_images.append(data[mask])
     final_targets += [class_iter for _ in range(num_class_images)]
 
-np.savez(os.path.join(args.output_dir, '1m.npz'), image=np.concatenate(final_images), label=np.array(final_targets))
+np.savez(os.path.join(args.output_dir, 'dataset.npz'), image=np.concatenate(final_images), label=np.array(final_targets))

@@ -14,15 +14,55 @@ from torch_utils import distributed as dist
 from torchvision.datasets import CIFAR10
 from torchvision.transforms import ToTensor
 
+htanh = torch.nn.Hardtanh()
+
+def boltz_score(x: torch.Tensor, sigma_g: torch.Tensor, mu_c: torch.Tensor, sigma_c: torch.Tensor) -> torch.Tensor:
+    """
+    x: input tensor of (B, C, H, W)
+    sigma_g: gaussian noise scale tensor of (B,), positive
+    mu_c: adaptive distribution loc tensor of (B, C, H, W)
+    sigma_c: adaptive distribution scale tensor of (B,)
+    """
+    y = x - mu_c
+    u = sigma_g.type(torch.double)/sigma_c.type(torch.double)
+    cutoff_s_val = 35.493278272052976
+    cutoff_u_val = 20.
+    f = torch.where(
+        u >= cutoff_u_val,
+        cutoff_s_val + (u-cutoff_u_val)*(np.pi**0.5),
+        (torch.exp(-(u**2))/(torch.erfc(u)))
+    )
+    slope = ((2**0.5)/(sigma_c) - (2**0.5)/(sigma_g*(np.pi**0.5))*f).type(torch.float)
+    height = (2**0.5)/sigma_c
+    return height[:, None, None, None]*htanh(slope[:, None, None, None]*y)
+
 BASE_DATASETS = ["cifar10"] # more later
 
+def percentile_clamp(x, bnd=1., perc=0.9):
+
+    if perc < 1.0:
+        assert perc > 0.
+        # sort the pixels in the batch
+        x_sorted, indices = torch.sort(x.view(x.shape[0], -1).abs(), dim=-1)
+        elem_perc = x_sorted[:, int(x_sorted.shape[1] * perc)][:, None, None, None]
+        
+        # determine if threshs are greater than bnd
+        thresh_exceed = elem_perc > bnd
+        # thresh > bnd, clamp to threshold, rescale to bnd
+        x = torch.where(
+            thresh_exceed.expand_as(x),
+            torch.clamp(x, -elem_perc.expand_as(x), elem_perc.expand_as(x)) / elem_perc * bnd,
+            x
+        )
+    return x
 #----------------------------------------------------------------------------
 # Proposed EDM sampler (Algorithm 2).
 
 def edm_ce_sampler(
-    net, latents, class_labels=None, randn_like=torch.randn_like,
+    net, net_uncond, latents, class_labels=None, randn_like=torch.randn_like,
     num_steps=18, sigma_min=0.002, sigma_max=80, rho=7,
-    S_churn=0, S_min=0, S_max=float('inf'), S_noise=1):
+    S_churn=0, S_min=0, S_max=float('inf'), S_noise=1,
+    mu_ce=None, ce_sigma=0.2, guidance=0., perc=1.0):
     # Adjust noise levels based on what's supported by the network.
     sigma_min = max(sigma_min, net.sigma_min)
     sigma_max = min(sigma_max, net.sigma_max)
@@ -31,6 +71,9 @@ def edm_ce_sampler(
     step_indices = torch.arange(num_steps, dtype=torch.float64, device=latents.device)
     t_steps = (sigma_max ** (1 / rho) + step_indices / (num_steps - 1) * (sigma_min ** (1 / rho) - sigma_max ** (1 / rho))) ** rho
     t_steps = torch.cat([net.round_sigma(t_steps), torch.zeros_like(t_steps[:1])]) # t_N = 0
+
+    B = latents.shape[0]
+    dev = latents.device
 
     # Main sampling loop.
     x_next = latents.to(torch.float64) * t_steps[0]
@@ -45,13 +88,43 @@ def edm_ce_sampler(
         # Euler step.
         denoised = net(x_hat, t_hat, class_labels).to(torch.float64)
         d_cur = (x_hat - denoised) / t_hat
-        x_next = x_hat + (t_next - t_hat) * d_cur
+        if guidance > 0.:
+            denoised_uncond = net_uncond(x_hat, t_hat, None).to(torch.float64)
+            d_cur_uncond = (x_hat - denoised_uncond) / t_hat
+            d_cur += guidance * (d_cur - d_cur_uncond) # classifier-free guidance
+
+        if mu_ce is not None:
+            var_t = t_hat**2
+            var_max = sigma_max**2
+            d_cur += t_hat * -boltz_score(x_hat, t_hat*torch.ones((B,), device=dev), mu_ce, ce_sigma*torch.ones((B,), device=dev))
+            # d_cur += t_hat * (x_hat - mu_ce) / (ce_sigma**2 + var_t) # d_cur approx sigma_t * -score
+        
+        # calculate x_orig and apply dynamic thresholding
+        x_orig = x_hat - t_hat * d_cur
+        x_orig = percentile_clamp(x_orig, 1., perc)
+        x_next = x_orig + (t_next / t_hat) * (x_hat - x_orig)
+        # x_next = x_hat + (t_next - t_hat) * d_cur
 
         # Apply 2nd order correction.
         if i < num_steps - 1:
             denoised = net(x_next, t_next, class_labels).to(torch.float64)
             d_prime = (x_next - denoised) / t_next
-            x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
+
+            if guidance > 0.:
+                denoised_uncond = net_uncond(x_next, t_next, None).to(torch.float64)
+                d_prime_uncond = (x_next - denoised_uncond) / t_next
+                d_prime += guidance * (d_prime - d_prime_uncond) # classifier-free guidance
+
+            if mu_ce is not None:
+                var_t = t_next**2
+                var_max = sigma_max**2
+                # d_prime += t_next * (x_next - mu_ce) / (ce_sigma**2 + var_t) # d_cur approx sigma_t * -score
+                d_prime += t_next * -boltz_score(x_next, t_next*torch.ones((B,), device=dev), mu_ce, ce_sigma*torch.ones((B,), device=dev))
+
+            x_orig = x_hat - t_hat * (0.5 * d_cur + 0.5 * d_prime)
+            x_orig = percentile_clamp(x_orig, 1., perc)
+            x_next = x_orig + (t_next / t_hat) * (x_hat - x_orig)
+            # x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
 
     return x_next
 
@@ -97,6 +170,7 @@ def parse_int_list(s):
 
 @click.command()
 @click.option('--network', 'network_pkl',  help='Network pickle filename', metavar='PATH|URL',                      type=str, required=True)
+@click.option('--network_uncond', 'network_pkl_uncond',  help='Network pickle filename', metavar='PATH|URL',        type=str, required=True)
 @click.option('--outdir',                  help='Where to save the output images', metavar='DIR',                   type=str, required=True)
 @click.option('--subdirs',                 help='Create subdirectory for every 1000 seeds',                         is_flag=True)
 @click.option('--batch', 'max_batch_size', help='Maximum batch size', metavar='INT',                                type=click.IntRange(min=1), default=64, show_default=True)
@@ -115,15 +189,19 @@ def parse_int_list(s):
 @click.option('--S_max', 'S_max',          help='Stoch. max noise level', metavar='FLOAT',                          type=click.FloatRange(min=0), default='inf', show_default=True)
 @click.option('--S_noise', 'S_noise',      help='Stoch. noise inflation', metavar='FLOAT',                          type=float, default=1, show_default=True)
 
-# args for CE sampling
+@click.option('--ce_sigma',                help='Scale of the CE neighborhood distribution', metavar='FLOAT',       type=float, default=0.2, show_default=True)
+@click.option('--guidance',       help='Classifier-free guidance', metavar='FLOAT',                        type=float, default=10., show_default=True)
+@click.option('--perc',                    help='Guidance clipping percentile',                                     type=float, default=1.0, show_default=True)
+
+# other CE-related args
 @click.option('--base_dataset_root',       help='Path to base datasets folder', metavar='PATH',                     type=str, default='~/data')
 @click.option('--base_dataset',            help='Base dataset for CE generation', metavar='STR',                    type=str, default='cifar10')
 @click.option('--n_ces',                   help='Number of CEs per class', metavar='INT',                           type=int, default=2, show_default=True)
-@click.option('--guidance_strength',       help='Classifier-free guidance', metavar='FLOAT',                        type=float, default=10., show_default=True)
-@click.option('--ce_sigma',                help='Scale of the CE neighborhood distribution', metavar='FLOAT',       type=float, default=0.2, show_default=True)
+
+@click.option('--verbose', is_flag=True)
 
 
-def main(network_pkl, outdir, subdirs, base_indices, class_num, max_batch_size, base_dataset_root, base_dataset, n_ces, guidance_strength, ce_sigma, device=torch.device('cuda'), **sampler_kwargs):
+def main(network_pkl, network_pkl_uncond, outdir, subdirs, base_indices, class_num, max_batch_size, base_dataset_root, base_dataset, n_ces, verbose, device=torch.device('cuda'), **sampler_kwargs):
     """Generate random images using the techniques described in the paper
     "Elucidating the Design Space of Diffusion-Based Generative Models".
 
@@ -131,12 +209,12 @@ def main(network_pkl, outdir, subdirs, base_indices, class_num, max_batch_size, 
 
     \b
     # Generate 64 images and save them as out/*.png
-    python generate.py --outdir=out --base_indices=0-63 --batch=64 \\
+    python generate_ces.py --outdir=out --base_indices=0-63 --batch=64 \\
         --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl
 
     \b
     # Generate 1024 images using 2 GPUs
-    torchrun --standalone --nproc_per_node=2 generate.py --outdir=out --seeds=0-999 --batch=64 \\
+    torchrun --standalone --nproc_per_node=2 generate_ces.py --outdir=out --seeds=0-999 --batch=64 \\
         --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl
     """
 
@@ -154,13 +232,16 @@ def main(network_pkl, outdir, subdirs, base_indices, class_num, max_batch_size, 
     dist.print0(f'Loading network from "{network_pkl}"...')
     with dnnlib.util.open_url(network_pkl, verbose=(dist.get_rank() == 0)) as f:
         net = pickle.load(f)['ema'].to(device)
+    # Load unconditional network.
+    dist.print0(f'Loading unconditional network from "{network_pkl_uncond}"...')
+    with dnnlib.util.open_url(network_pkl_uncond, verbose=(dist.get_rank() == 0)) as f:
+        net_uncond = pickle.load(f)['ema'].to(device)
 
     # load the training dataset for the CEs
     assert base_dataset in BASE_DATASETS
 
-    base_dataset = None
     if base_dataset == 'cifar10':
-        base_dataset = CIFAR10(base_dataset_root, train=True, transform=ToTensor(), download=False)
+        base_dataset = CIFAR10(os.path.join(base_dataset_root, base_dataset), train=True, transform=ToTensor(), download=False)
     else:
         raise ValueError(f"{base_dataset} not recognized")
 
@@ -172,7 +253,7 @@ def main(network_pkl, outdir, subdirs, base_indices, class_num, max_batch_size, 
         os.makedirs(outdir, exist_ok=True)
 
     # Loop over batches.
-    dist.print0(f'Generating {len(base_indices) * sampler_kwargs["n_ces"]} images to "{outdir}"...')
+    dist.print0(f'Generating {len(base_indices) * n_ces} images to "{outdir}"...')
 
     for class_idx in range(class_num):
         for ce_idx in range(n_ces):
@@ -182,20 +263,20 @@ def main(network_pkl, outdir, subdirs, base_indices, class_num, max_batch_size, 
             total_image_np = []
 
             # iterate through the base_dataset
-            for batch_indices in tqdm.tqdm(rank_batches, unit='batch', disable=(dist.get_rank() != 0)):
+            for batch_indices in tqdm.tqdm(rank_batches, unit='batch', disable=(dist.get_rank() != 0 or not verbose)):
                 torch.distributed.barrier()
                 batch_size = len(batch_indices)
                 if batch_size == 0:
                     continue
 
                 # get the data for this rank. use this to adjust the sampling function for ce_generation
-                base_data = base_dataset[batch_indices]
-                def _net(x_hat, t_hat, class_labels):
-                    # add together score estimates from the diffusion model with scores of the neighborhood.
-                    # solution trajectories should point towards the mean of the data
-                    
-                    # D(x,t) = t^2 dlogp(x,t) + x
-                    # D*(x,t) = t^2 (dlogp(x,t) + dlogq(x,t)) + x
+                base_data = []
+                for b_i in batch_indices:
+                    samp, _ = base_dataset[b_i]
+                    base_data.append(samp[None, :, :, :])
+                base_data = torch.cat(base_data, dim=0).to(device)
+                # normalize the base_data
+                mu_ce = 2.*base_data - 1.
 
                 # Pick latents and labels.
                 rnd = StackedRandomGenerator(device, batch_indices + (ce_idx*len(base_indices)))
@@ -211,7 +292,7 @@ def main(network_pkl, outdir, subdirs, base_indices, class_num, max_batch_size, 
                 sampler_kwargs = {key: value for key, value in sampler_kwargs.items() if value is not None}
 
                 sampler_fn = edm_ce_sampler
-                images = sampler_fn(net, latents, class_labels, randn_like=rnd.randn_like, **sampler_kwargs)
+                images = sampler_fn(net, net_uncond, latents, class_labels, randn_like=rnd.randn_like, mu_ce=mu_ce, **sampler_kwargs)
 
                 # Save images.
                 images_np = (images * 127.5 + 128).clip(0, 255).to(torch.uint8).permute(0, 2, 3, 1).contiguous()

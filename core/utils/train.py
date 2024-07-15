@@ -121,11 +121,6 @@ class Trainer(object):
                 x, y_x_score = x.chunk(2, dim=1)
             
             if adversarial:
-                # y_x_score = None
-                # if self.params.score:
-                #     with torch.no_grad():
-                #         x_centered = x * 2. - 1.
-                #         y_x_score = 2.*self.score_model(x_centered, y) # pass this to the attacks
 
                 if self.params.beta is not None and self.params.mart:
                     loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
@@ -143,7 +138,6 @@ class Trainer(object):
             if self.params.scheduler in ['cyclic']:
                 self.scheduler.step()
             
-            # metrics = metrics.append(pd.DataFrame(batch_metrics, index=[0]), ignore_index=True) ### NOTE - DEPRECATED
             metrics = pd.concat([metrics, pd.DataFrame(batch_metrics, index=[0])], ignore_index=True)
         
         if self.params.scheduler in ['step', 'converge', 'cosine', 'cosinew']:
@@ -179,6 +173,8 @@ class Trainer(object):
             y_adv = y
         out = self.model(x_adv)
         loss = self.criterion(out, y_adv)
+
+        # loss += gradient_alignment_loss()
         
         preds = out.detach()
         batch_metrics = {'loss': loss.item()}

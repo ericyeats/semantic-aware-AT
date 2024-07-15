@@ -34,7 +34,7 @@ def load_svhns(data_dir, use_augmentation='base', use_consistency=False, aux_tak
                                          transform=test_transform)
     if validation:
         val_dataset = torchvision.datasets.SVHN(root=data_dir, split='train', download=True, transform=test_transform)
-        val_dataset = torch.utils.data.Subset(val_dataset, np.arange(0, 1024))  
+        val_dataset = torch.utils.data.Subset(val_dataset, np.arange(len(val_dataset)-1024, len(val_dataset)))
         return train_dataset, test_dataset, val_dataset
     return train_dataset, test_dataset
 

@@ -2,3 +2,9 @@
 logs/
 trained_models/
 score_data/
+figs/
+gendata/
+ce_data/
+selection_model/
+synthetic_data/
+vis_samp.png
