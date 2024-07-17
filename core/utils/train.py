@@ -19,7 +19,7 @@ from .mart import mart_loss
 from .rst import CosineLR
 from .trades import trades_loss
 # from mc_score import MC_Score_EDM
-from ..data import SCORE_DATASETS
+from ..data import SCORE_DATASETS, SEMISUP_DATASETS
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -113,7 +113,18 @@ class Trainer(object):
         self.model.train()
         
         for data in tqdm(dataloader, desc='Epoch {}: '.format(epoch), disable=not verbose):
-            x, y = data
+
+            if self.params.data in SEMISUP_DATASETS:
+                x, y, p = data
+                if self.params.standard_pseudo:
+                    x_pseudo = x[p].to(device)
+                    y_pseudo = y[p].to(device)
+                    p_not = torch.logical_not(p)
+                    x = x[p_not]
+                    y = y[p_not]
+            else:
+                x, y = data
+
             x, y = x.to(device), y.to(device)
 
             y_x_score = None
@@ -130,6 +141,12 @@ class Trainer(object):
                     loss, batch_metrics = self.adversarial_loss(x, y, y_x_score=y_x_score)
             else:
                 loss, batch_metrics = self.standard_loss(x, y)
+
+            if self.params.data in SEMISUP_DATASETS and self.params.standard_pseudo:
+                p_loss, p_batch_metrics = self.standard_loss(x_pseudo, y_pseudo)
+                p_weight = self.params.unsup_fraction
+                loss = p_loss*p_weight + loss*(1. - p_weight)
+                metrics = pd.concat([metrics, pd.DataFrame(p_batch_metrics, index=[0])], ignore_index=True)
                 
             loss.backward()
             if self.params.clip_grad:
@@ -213,7 +230,11 @@ class Trainer(object):
         acc = 0.0
         self.model.eval()
         
-        for x, y in dataloader:
+        for batch in dataloader:
+            if len(batch) == 3: # quick fix in case eval is called on semisup training dataset
+                x, y, _ = batch
+            else:
+                x, y = batch
             x, y = x.to(device), y.to(device)
             if adversarial:
                 with ctx_noparamgrad_and_eval(self.model):

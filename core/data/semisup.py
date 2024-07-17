@@ -122,7 +122,14 @@ class SemiSupervisedDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, item):
         self.dataset.labels = self.targets
-        return self.dataset[item]
+        ret = self.dataset[item]
+        if not self.train:
+            return ret
+        # TRAINING ONLY
+        pseudo = torch.tensor(item >= self.orig_len, dtype=torch.bool)
+        if isinstance(ret, tuple):
+            return ret + (pseudo,)
+        return self.dataset[item], pseudo
 
 
 class SemiSupervisedDatasetSVHN(torch.utils.data.Dataset):

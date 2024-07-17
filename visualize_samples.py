@@ -33,5 +33,5 @@ if __name__ == "__main__":
 
     fig.tight_layout()
 
-    fig.savefig('./vis_samp.png')
+    fig.savefig('./figs/vis_samp.png')
 

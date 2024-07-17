@@ -29,12 +29,10 @@ parse = parser_train()
 parse.add_argument('--tau', type=float, default=0.995, help='Weight averaging decay.')
 
 # extra args for score-based constraint
-# parse.add_argument('--score', action='store_true', help='Adversarial training with EDM-based semantic projection')
+parse.add_argument('--standard_pseudo', action='store_true', help='Only perform standard training on pseudo data')
 parse.add_argument('--gamma', help='Semantic cutoff value in [0, 1], default 0.5', type=float, default=0.5)
-# parse.add_argument('--score_network_pkl', help='Network pickle filename', metavar='PATH|URL', type=str)
 parse.add_argument('--time', help='Time in [0, 1] to which data should be diffused for average scores. default 0.1', type=float, default=0.1)
 parse.add_argument('--n_mc_samples', type=int, default=20, help='Number of samples for average score calculation')
-# parse.add_argument('--n_chunks', type=int, default=4, help='Number of chunks for the score estimation network forward pass')
 parse.add_argument('--verbose', action='store_true')
 parse.add_argument('--standard', action='store_true')
 parse.add_argument('--random_proj', action='store_true', help='Baseline with random score projection vector')
