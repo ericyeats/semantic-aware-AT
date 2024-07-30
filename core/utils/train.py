@@ -132,13 +132,18 @@ class Trainer(object):
                 x, y_x_score = x.chunk(2, dim=1)
             
             if adversarial:
-
-                if self.params.beta is not None and self.params.mart:
-                    loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
-                elif self.params.beta is not None:
-                    loss, batch_metrics = self.trades_loss(x, y, beta=self.params.beta)
+                
+                if self.params.score_matching:
+                    x.requires_grad_(True)
+                    loss, batch_metrics = self.standard_loss(x, y)
+                    # score matching loss here
                 else:
-                    loss, batch_metrics = self.adversarial_loss(x, y, y_x_score=y_x_score)
+                    if self.params.beta is not None and self.params.mart:
+                        loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
+                    elif self.params.beta is not None:
+                        loss, batch_metrics = self.trades_loss(x, y, beta=self.params.beta)
+                    else:
+                        loss, batch_metrics = self.adversarial_loss(x, y, y_x_score=y_x_score)
             else:
                 loss, batch_metrics = self.standard_loss(x, y)
 
@@ -148,7 +153,18 @@ class Trainer(object):
                 loss = p_loss*p_weight + loss*(1. - p_weight)
                 metrics = pd.concat([metrics, pd.DataFrame(p_batch_metrics, index=[0])], ignore_index=True)
                 
-            loss.backward()
+            loss.backward(create_graph=self.params.score_matching)
+
+            if self.params.score_matching:
+                # x.grad is gradient of NLL w.r.t. x
+                sm_loss = 0.5*(y_x_score + x.shape[0]*x.grad).square().view(x.shape[0], -1).sum(dim=-1).mean()
+                metrics = pd.concat([metrics, pd.DataFrame({'sm_loss': sm_loss.item()}, index=[0])], ignore_index=True)
+                
+                (self.params.beta * sm_loss).backward()
+
+                x.grad = None
+
+
             if self.params.clip_grad:
                 nn.utils.clip_grad_norm_(self.model.parameters(), self.params.clip_grad)
             self.optimizer.step()
@@ -173,7 +189,6 @@ class Trainer(object):
         preds = out.detach()
         batch_metrics = {'loss': loss.item(), 'clean_acc': accuracy(y, preds)}
         return loss, batch_metrics
-    
     
     def adversarial_loss(self, x, y, y_x_score=None):
         """

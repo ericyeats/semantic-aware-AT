@@ -34,7 +34,7 @@ def parser_train():
     parser.add_argument('-na', '--num-adv-epochs', type=int, default=400, help='Number of adversarial training epochs.')
     parser.add_argument('--adv-eval-freq', type=int, default=25, help='Adversarial evaluation frequency (in epochs).')
     
-    parser.add_argument('--beta', default=None, type=float, help='Stability regularization, i.e., 1/lambda in TRADES.')
+    parser.add_argument('--beta', default=0., type=float, help='Stability regularization, i.e., 1/lambda in TRADES.')
     
     parser.add_argument('--lr', type=float, default=0.4, help='Learning rate for optimizer (SGD).')
     parser.add_argument('--weight-decay', type=float, default=5e-4, help='Optimizer (SGD) weight decay.')
@@ -80,15 +80,15 @@ def parser_eval():
     """
     parser = argparse.ArgumentParser(description='Robustness evaluation.')
 
-    parser.add_argument('--data-dir', type=str, default='/cluster/home/rarade/data/')
-    parser.add_argument('--log-dir', type=str, default='/cluster/scratch/rarade/test/')
+    parser.add_argument('--data-dir', type=str, default='~/data/')
+    parser.add_argument('--log-dir', type=str, default='./logs/')
         
     parser.add_argument('--desc', type=str, required=True, help='Description of model to be evaluated.')
     parser.add_argument('--num-samples', type=int, default=1000, help='Number of test samples.')
 
     # eval-aa.py
     parser.add_argument('--train', action='store_true', default=False, help='Evaluate on training set.')
-    parser.add_argument('-v', '--version', type=str, default='standard', choices=['custom', 'plus', 'standard'], 
+    parser.add_argument('-v', '--version', type=str, default='standard', choices=['custom', 'plus', 'standard', 'rand'], 
                         help='Version of AA.')
 
     # eval-adv.py

@@ -31,11 +31,11 @@ def read_csv_to_dict(file_path):
 
 if __name__ == "__main__":
 
-    desc = "MADRY"
+    desc = "TRADES"
 
     orig_data_dict = read_csv_to_dict(f'./trained_models/WRN28-10Swish_cifar10_lr0p2_{desc}_epoch100_bs512/stats_adv.csv')
-    syn_data_dict = read_csv_to_dict(f'./trained_models/WRN28-10Swish_cifar10s_Syn30k_lr0p2_{desc}_PSEUDO_epoch100_bs512_fraction0p2_ls0p1/stats_adv.csv')
-    ce_data_dict = read_csv_to_dict(f'./trained_models/WRN28-10Swish_cifar10s_CE30k_lr0p2_{desc}_PSEUDO_epoch100_bs512_fraction0p2_ls0p1/stats_adv.csv')
+    syn_data_dict = read_csv_to_dict(f'./trained_models/WRN28-10Swish_cifar10s_Syn30k_lr0p2_{desc}_epoch100_bs512_fraction0p2_ls0p1/stats_adv.csv')
+    ce_data_dict = read_csv_to_dict(f'./trained_models/WRN28-10Swish_cifar10s_CE30k_lr0p2_{desc}_epoch100_bs512_fraction0p2_ls0p1/stats_adv.csv')
 
 
     # Create a figure and axis
@@ -43,12 +43,13 @@ if __name__ == "__main__":
 
     # Plot the train accuracy, robust train accuracy, val robust accuracy, standard test accuracy
     for i, key in enumerate(["train_clean_acc", "test_clean_acc"]):
+        ls = '-' if key == "train_clean_acc" else '--'
         if key in orig_data_dict.keys():
-            ax.plot(orig_data_dict['epoch'], orig_data_dict[key], label=f'{desc}: ' + key, color=colors[i], linewidth=2.5)
-        if key in syn_data_dict.keys():
-            ax.plot(syn_data_dict['epoch'], syn_data_dict[key], label=f'{desc} + EDM: ' + key, color=colors[i], linestyle='--', linewidth=2.5)
+            ax.plot(orig_data_dict['epoch'], orig_data_dict[key], label=f'{desc}: ' + key, color=colors[0], linestyle=ls, linewidth=2.5)
+        # if key in syn_data_dict.keys():
+        #     ax.plot(syn_data_dict['epoch'], syn_data_dict[key], label=f'{desc} + EDM: ' + key, color=colors[2], linestyle=ls, linewidth=2.5)
         if key in ce_data_dict.keys():
-            ax.plot(ce_data_dict['epoch'], ce_data_dict[key], label=f'{desc} + CE: ' + key, color=colors[i], linestyle=':', linewidth=2.5)
+            ax.plot(ce_data_dict['epoch'], ce_data_dict[key], label=f'{desc} + CE: ' + key, color=colors[1], linestyle=ls, linewidth=2.5)
         
     # Add titles and labels
     ax.set_xlabel('Epoch')
@@ -67,12 +68,13 @@ if __name__ == "__main__":
 
     # Plot the train accuracy, robust train accuracy, val robust accuracy, standard test accuracy
     for i, key in enumerate(["train_adversarial_acc", "eval_adversarial_acc"]):
+        ls = '-' if key == "train_adversarial_acc" else '--'
         if key in orig_data_dict.keys():
-            ax.plot(orig_data_dict['epoch'], orig_data_dict[key], label=f'{desc}: ' + key, color=colors[i], linewidth=2.5)
-        if key in syn_data_dict.keys():
-            ax.plot(syn_data_dict['epoch'], syn_data_dict[key], label=f'{desc} + EDM: ' + key, color=colors[i], linestyle='--', linewidth=2.5)
+            ax.plot(orig_data_dict['epoch'], orig_data_dict[key], label=f'{desc}: ' + key, color=colors[0], linestyle=ls, linewidth=2.5)
+        # if key in syn_data_dict.keys():
+        #     ax.plot(syn_data_dict['epoch'], syn_data_dict[key], label=f'{desc} + EDM: ' + key, color=colors[2], linestyle=ls, linewidth=2.5)
         if key in ce_data_dict.keys():
-            ax.plot(ce_data_dict['epoch'], ce_data_dict[key], label=f'{desc} + CE: ' + key, color=colors[i], linestyle=':', linewidth=2.5)
+            ax.plot(ce_data_dict['epoch'], ce_data_dict[key], label=f'{desc} + CE: ' + key, color=colors[1], linestyle=ls, linewidth=2.5)
         
     # Add titles and labels
     ax.set_xlabel('Epoch')

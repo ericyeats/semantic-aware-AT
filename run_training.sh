@@ -52,18 +52,18 @@
 
 #### Madry training with Synthetic/CE data
 
-python train-wa.py --data-dir ~/data \
-    --log-dir 'trained_models' \
-    --desc 'WRN28-10Swish_cifar10s_Syn30k_lr0p2_MADRY_epoch100_bs512_fraction0p2_ls0p1' \
-    --data cifar10s \
-    --batch-size 512 \
-    --batch-size-validation 512 \
-    --model wrn-28-10-swish \
-    --num-adv-epochs 100 \
-    --lr 0.2 \
-    --ls 0.1 \
-    --aux-data-filename './synthetic_data/cifar10_30k/dataset.npz' \
-    --unsup-fraction 0.2
+# python train-wa.py --data-dir ~/data \
+#     --log-dir 'trained_models' \
+#     --desc 'WRN28-10Swish_cifar10s_Syn30k_lr0p2_MADRY_epoch100_bs512_fraction0p2_ls0p1' \
+#     --data cifar10s \
+#     --batch-size 512 \
+#     --batch-size-validation 512 \
+#     --model wrn-28-10-swish \
+#     --num-adv-epochs 100 \
+#     --lr 0.2 \
+#     --ls 0.1 \
+#     --aux-data-filename './synthetic_data/cifar10_30k/dataset.npz' \
+#     --unsup-fraction 0.2
 
 # TRADES training with Synthetic/CE data
 
@@ -80,3 +80,22 @@ python train-wa.py --data-dir ~/data \
 #     --beta 5.0 \
 #     --aux-data-filename './synthetic_data/cifar10_30k/dataset.npz' \
 #     --unsup-fraction 0.2
+
+
+# Score Matching training
+
+python -u train-wa.py --data-dir ./score_data \
+    --log-dir 'trained_models' \
+    --desc 'WRN28-10Swish_cifar10score_lr0p2_TRADES_SCORE_MATCHING_beta5p0_gamma0p5_t0p05_epoch100_bs512_ls0p1' \
+    --data cifar10score \
+    --batch-size 512 \
+    --batch-size-validation 512 \
+    --model wrn-28-10-swish \
+    --num-adv-epochs 100 \
+    --time 0.05 \
+    --n_mc_samples 40 \
+    --lr 0.2 \
+    --ls 0.1 \
+    --beta 5.0 \
+    --score_matching \
+    --gamma 0.5

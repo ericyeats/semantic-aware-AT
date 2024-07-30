@@ -133,14 +133,24 @@ class WATrainer(Trainer):
                     if self.params.random_proj:
                         y_x_score = torch.randn_like(x)  # random projection
                     
-                    if self.params.beta is not None and self.params.mart:
-                        loss, batch_metrics = self.mart_loss(x, y, beta=self.params.beta)
-                    elif self.params.beta is not None and self.params.LSE:
-                        loss, batch_metrics = self.trades_loss_LSE(x, y, beta=self.params.beta, y_x_score=y_x_score)
-                    elif self.params.beta is not None:
-                        loss, batch_metrics = self.trades_loss(x, y, beta=self.params.beta, y_x_score=y_x_score)
+
+                    if self.params.score_matching:
+                        x.requires_grad_(True)
+                    
+                    if self.params.beta != 0. and self.params.mart:
+                        ret_items = self.mart_loss(x, y, beta=self.params.beta)
+                    elif self.params.beta != 0. and self.params.LSE:
+                        ret_items = self.trades_loss_LSE(x, y, beta=self.params.beta, ret_loss_natural=self.params.score_matching)
+                    elif self.params.beta != 0.:
+                        ret_items = self.trades_loss(x, y, beta=self.params.beta, ret_loss_natural=self.params.score_matching)
                     else:
-                        loss, batch_metrics = self.adversarial_loss(x, y, y_x_score=y_x_score)
+                        ret_items = self.adversarial_loss(x, y)
+
+                    if len(ret_items) == 3:
+                        loss, batch_metrics, loss_natural = ret_items
+                    else:
+                        loss, batch_metrics = ret_items
+
                 else:
                     loss, batch_metrics = self.standard_loss(x, y)
 
@@ -150,7 +160,22 @@ class WATrainer(Trainer):
                     loss = p_loss*p_weight + loss*(1. - p_weight)
                     metrics = pd.concat([metrics, pd.DataFrame(p_batch_metrics, index=[0])], ignore_index=True)
                     
+            if self.params.score_matching:
+                x_grad = torch.autograd.grad(loss_natural*x.shape[0], x, create_graph=True)[0]
+                # x.grad is gradient of NLL w.r.t. x
+                sm_loss = 0.5*(y_x_score + x_grad).square().view(x.shape[0], -1).sum(dim=-1).mean()
+                metrics = pd.concat([metrics, pd.DataFrame({'sm_loss': sm_loss.item()}, index=[0])], ignore_index=True)
+                
+                loss += self.params.gamma * sm_loss
+                x.requires_grad_(False)
+            
             loss.backward()
+
+            
+
+                
+            
+
             if self.params.clip_grad:
                 nn.utils.clip_grad_norm_(self.model.parameters(), self.params.clip_grad)
             self.optimizer.step()
@@ -171,39 +196,39 @@ class WATrainer(Trainer):
         return dict(metrics.mean())
     
     
-    def trades_loss(self, x, y, beta, y_x_score=None):
+    def trades_loss(self, x, y, beta, ret_loss_natural=False):
         """
         TRADES training.
         """
-        loss, batch_metrics = trades_loss(self.model, x, y, self.optimizer, step_size=self.params.attack_step, 
+        items = trades_loss(self.model, x, y, self.optimizer, step_size=self.params.attack_step, 
                                           epsilon=self.params.attack_eps, perturb_steps=self.params.attack_iter, 
                                           beta=beta, attack=self.params.attack, label_smoothing=self.params.ls,
-                                          use_cutmix=self.params.CutMix, y_x_score=y_x_score, gamma=self.params.gamma)
-        return loss, batch_metrics
+                                          use_cutmix=self.params.CutMix, ret_loss_natural=ret_loss_natural)
+        return items
 
-    def trades_loss_consistency(self, x_aug1, x_aug2, y, beta):
+    def trades_loss_consistency(self, x_aug1, x_aug2, y, beta, ret_loss_natural=False):
         """
         TRADES training with Consistency.
         """
         x = torch.cat([x_aug1, x_aug2], dim=0)
-        loss, batch_metrics = trades_loss(self.model, x, y.repeat(2), self.optimizer, step_size=self.params.attack_step, 
+        items = trades_loss(self.model, x, y.repeat(2), self.optimizer, step_size=self.params.attack_step, 
                                           epsilon=self.params.attack_eps, perturb_steps=self.params.attack_iter, 
                                           beta=beta, attack=self.params.attack, label_smoothing=self.params.ls,
-                                          use_cutmix=self.params.CutMix, use_consistency=True, cons_lambda=self.params.cons_lambda, cons_tem=self.params.cons_tem)
-        return loss, batch_metrics
+                                          use_cutmix=self.params.CutMix, use_consistency=True, cons_lambda=self.params.cons_lambda, cons_tem=self.params.cons_tem, ret_loss_natural=ret_loss_natural)
+        return items
 
-    def trades_loss_LSE(self, x, y, beta, y_x_score=None):
+    def trades_loss_LSE(self, x, y, beta, ret_loss_natural=False):
         """
         TRADES training with LSE loss.
         """
-        loss, batch_metrics = trades_loss_LSE(self.model, x, y, self.optimizer, step_size=self.params.attack_step, 
+        items = trades_loss_LSE(self.model, x, y, self.optimizer, step_size=self.params.attack_step, 
                                           epsilon=self.params.attack_eps, perturb_steps=self.params.attack_iter, 
                                           beta=beta, attack=self.params.attack, label_smoothing=self.params.ls,
                                           clip_value=self.params.clip_value,
                                           use_cutmix=self.params.CutMix,
                                           num_classes=self.num_classes,
-                                          y_x_score=y_x_score, gamma=self.params.gamma)
-        return loss, batch_metrics  
+                                          ret_loss_natural=ret_loss_natural)
+        return items  
 
     
     def eval(self, dataloader, adversarial=False):
@@ -221,8 +246,9 @@ class WATrainer(Trainer):
                 x, y = batch
 
             x, y = x.to(device), y.to(device)
-            if self.params.data in SCORE_DATASETS and x.shape[1] == 6: # score dataset
-                x, x_score = x.chunk(2, dim=1)
+            if self.params.data in SCORE_DATASETS and x.shape[1] == 6: # in case called on score dataset
+                x, _ = x.chunk(2, dim=1)
+            
             if adversarial:
                 with ctx_noparamgrad_and_eval(self.wa_model):
                     x_adv, _ = self.eval_attack.perturb(x, y)            

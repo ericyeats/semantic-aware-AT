@@ -13,7 +13,8 @@ class DatasetWithScores(Dataset):
             transform: Optional[Callable] = None,
             target_transform: Optional[Callable] = None,
             data_score_file: str = "data_with_scores.pt",
-            labels_file: str = "labels.pt"
+            labels_file: str = "labels.pt",
+            validation=False
     ):
         super().__init__()
         self.data_score_file = data_score_file
@@ -21,6 +22,10 @@ class DatasetWithScores(Dataset):
         self.data_path = join(root, dataset_folder)
         self.data_with_scores = torch.load(join(self.data_path, self.data_score_file))
         self.labels = torch.load(join(self.data_path, self.labels_file))
+
+        if validation:
+            self.data_with_scores = self.data_with_scores[:-1024]
+            self.labels = self.labels[:-1024]
 
         self.transform = transform
         self.target_transform = target_transform

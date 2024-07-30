@@ -5,8 +5,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-
-
 if __name__ == "__main__":
 
     parser = ArgumentParser()
@@ -18,6 +16,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     ims = np.load(args.filename)
+    if 'image' in ims.files:
+        ims = ims['image']
 
     sq = int(float(args.n_disp)**0.5 + 0.5)
 

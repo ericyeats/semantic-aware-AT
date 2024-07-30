@@ -12,7 +12,7 @@ import torch.nn as nn
 
 from core.data import get_data_info
 from core.data import load_data
-from core.data import SEMISUP_DATASETS
+from core.data import SEMISUP_DATASETS, SCORE_DATASETS
 
 from core.utils import format_time
 from core.utils import Logger
@@ -30,7 +30,8 @@ parse.add_argument('--tau', type=float, default=0.995, help='Weight averaging de
 
 # extra args for score-based constraint
 parse.add_argument('--standard_pseudo', action='store_true', help='Only perform standard training on pseudo data')
-parse.add_argument('--gamma', help='Semantic cutoff value in [0, 1], default 0.5', type=float, default=0.5)
+parse.add_argument('--score_matching', action='store_true', help='Perform score matching with score data')
+parse.add_argument('--gamma', help='Score matching regularization strength', type=float, default=0.0)
 parse.add_argument('--time', help='Time in [0, 1] to which data should be diffused for average scores. default 0.1', type=float, default=0.1)
 parse.add_argument('--n_mc_samples', type=int, default=20, help='Number of samples for average score calculation')
 parse.add_argument('--verbose', action='store_true')
@@ -67,9 +68,11 @@ torch.backends.cudnn.benchmark = True
 
 
 # Load data
+if args.score_matching:
+    assert args.data in SCORE_DATASETS
 
 seed(args.seed)
-val = args.data in SEMISUP_DATASETS
+val = args.data in SEMISUP_DATASETS or args.data in SCORE_DATASETS
 loaded_data = load_data(
     DATA_DIR, BATCH_SIZE, BATCH_SIZE_VALIDATION, use_augmentation=args.augment, use_consistency=args.consistency, shuffle_train=True, 
     aux_data_filename=args.aux_data_filename, unsup_fraction=args.unsup_fraction, validation=val, time=args.time, n_mc_samples=args.n_mc_samples
@@ -129,7 +132,7 @@ for epoch in range(start_epoch, NUM_ADV_EPOCHS+1):
     epoch_metrics = {'train_'+k: v for k, v in res.items()}
     epoch_metrics.update({'epoch': epoch, 'lr': last_lr, 'test_clean_acc': test_acc, 'test_adversarial_acc': ''})
     
-    if not args.standard:
+    if not (args.standard or args.score_matching):
         if epoch % args.adv_eval_freq == 0 or epoch == NUM_ADV_EPOCHS:        
             test_adv_acc = trainer.eval(test_dataloader, adversarial=True)
             logger.log('Adversarial Accuracy-\tTrain: {:.2f}%.\tTest: {:.2f}%.'.format(res['adversarial_acc']*100, 
